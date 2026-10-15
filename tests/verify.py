@@ -110,6 +110,7 @@ def main():
                 assert len(injections) == 1, ("missing actual handshake injection", mutant)
                 injected = json.loads(injections[0].read_text())
                 assert injected["cycle"] > 0 and injected["original"] ^ injected["corrupted"] == 1
+                assert injected["kind"] == ("actual_application_handshake" if mutant == "data" else "actual_status_handshake")
                 results.append(dict(mutant=mutant, exit_code=execution["exit_code"], mismatch=marker,
                                     injection=str(injections[0].relative_to(out))))
         elif args.operation == "reproduce":
@@ -132,6 +133,10 @@ def main():
             if coverage.exists():
                 quantity = json.loads(coverage.read_text())
                 state = quantity["outcome"]
+                if receipt.exists():
+                    execution = json.loads(receipt.read_text())
+                    if execution["exit_code"] != 0 or execution["timed_out"]:
+                        state = "failed"
             else:
                 quantity = None
                 state = "failed" if receipt.exists() else "not_completed_or_not_executed"
