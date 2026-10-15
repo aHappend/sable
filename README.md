@@ -29,9 +29,9 @@
 | **Current Engineering Status** | Phase: `verifier` (Step 2) — Autonomous RTL & Verification in Progress |
 | **Synthesizable RTL (`rtl/*.sv`)** | **3 modules / 979 lines** |
 | **Architecture & Protocol Docs (`design/*.md`)** | **2 files** ([`design/ARCHITECTURE.md`](design/ARCHITECTURE.md), [`design/SPEC.md`](design/SPEC.md)) |
-| **Verification & Reference Suite (`tests/*`)** | **7 files** |
+| **Verification & Reference Suite (`tests/*`)** | **8 files** |
 | **Product Whitepaper (`REPORT.pdf`)** | Pending independent verification sign-off |
-| **Last Synchronized** | `2026-10-15 18:24:03 UTC+8` |
+| **Last Synchronized** | `2026-10-15 18:25:07 UTC+8` |
 
 ## System Architecture & Protocol Specification
 
