@@ -15,7 +15,7 @@
   · <a href="README.md">English</a>
   · <a href="OBJECTIVE.md">原始任务规格书</a>
   · <a href="design/">架构与协议规格</a>
-  · <a href="rtl/">RTL 源码</a>
+  · <a href="rtl/">RTL 源码</a> · <a href="REPORT.pdf">正式技术报告 (PDF)</a>
   · <a href="brand/">品牌素材</a>
 </p>
 
@@ -26,12 +26,12 @@
 | 指标项 | 当前状态 / 数值 |
 | --- | --- |
 | **自主研发引擎** | **Vulcan 0.8**（后端模型 `gpt-6.1-sol`，全自治 `no_operator_assumption` 闭环） |
-| **当前工程进度** | 当前阶段：`completed`（第 3 步）— 全自主架构、RTL 与独立验证推进中 |
+| **当前工程进度** | 当前阶段：`completed`（第 3 步）— 已发布正式报告 (`REPORT.pdf`) |
 | **可综合 RTL 模块（`rtl/*.sv`）** | **3 个模块 / 共 979 行** |
 | **架构与协议文档（`design/*.md`）** | **2 份文档**（[`design/ARCHITECTURE.md`](design/ARCHITECTURE.md), [`design/SPEC.md`](design/SPEC.md)） |
 | **验证与参考模型套件（`tests/*`）** | **10 个文件** |
-| **产品技术白皮书（`REPORT.pdf`）** | 待独立验证签核后自动编译生成 |
-| **最近同步时间** | `2026-10-15 19:04:16 UTC+8` |
+| **产品技术白皮书（`REPORT.pdf`）** | [**已发布 (`REPORT.pdf`)**](REPORT.pdf) |
+| **最近同步时间** | `2026-10-15 19:05:19 UTC+8` |
 
 ## 系统架构与六大核心规格映射
 

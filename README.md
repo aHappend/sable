@@ -15,7 +15,7 @@
   · <a href="README.zh-CN.md">中文</a>
   · <a href="OBJECTIVE.md">Task Specification</a>
   · <a href="design/">Architecture & Spec</a>
-  · <a href="rtl/">RTL Modules</a>
+  · <a href="rtl/">RTL Modules</a> · <a href="REPORT.pdf">Official Report (PDF)</a>
   · <a href="brand/">Brand assets</a>
 </p>
 
@@ -26,12 +26,12 @@
 | Metric | Value |
 | --- | --- |
 | **Autonomous Engine** | **Vulcan 0.8** (`gpt-6.1-sol`, autonomous `no_operator_assumption` workflow) |
-| **Current Engineering Status** | Phase: `completed` (Step 3) — Autonomous RTL & Verification in Progress |
+| **Current Engineering Status** | Phase: `completed` (Step 3) — Official Report (`REPORT.pdf`) Published |
 | **Synthesizable RTL (`rtl/*.sv`)** | **3 modules / 979 lines** |
 | **Architecture & Protocol Docs (`design/*.md`)** | **2 files** ([`design/ARCHITECTURE.md`](design/ARCHITECTURE.md), [`design/SPEC.md`](design/SPEC.md)) |
 | **Verification & Reference Suite (`tests/*`)** | **10 files** |
-| **Product Whitepaper (`REPORT.pdf`)** | Pending independent verification sign-off |
-| **Last Synchronized** | `2026-10-15 19:04:16 UTC+8` |
+| **Product Whitepaper (`REPORT.pdf`)** | [**Published (`REPORT.pdf`)**](REPORT.pdf) |
+| **Last Synchronized** | `2026-10-15 19:05:19 UTC+8` |
 
 ## System Architecture & Protocol Specification
 
