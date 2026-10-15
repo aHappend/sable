@@ -218,7 +218,7 @@ module sable_rx #(
     assign m_ack_first=!rst && ack_f;
     assign m_ack_last=!rst && ack_l;
 
-    integer i, target_slot;
+    integer i;
     always @(posedge clk) begin
         if (rst) begin
             session<=session_id;

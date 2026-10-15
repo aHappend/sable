@@ -141,11 +141,10 @@ module sable_tx #(
     assign s_ack_ready = !rst;
 
     integer i, j, f, q, idx, candidate_stream, candidate_packet, candidate_slot;
-    integer status_choice, input_index, remaining;
+    integer status_choice, remaining;
     reg candidate_retry, found, found_packet;
     reg [63:0] build_data;
     reg [7:0] build_keep;
-    reg [15:0] expected_mask;
 
     always @* begin
         candidate_stream=-1;
@@ -223,7 +222,7 @@ module sable_tx #(
         endcase
     end
 
-    integer a, b, sp, sl;
+    integer a, b, sp;
     always @(posedge clk) begin
         if (rst) begin
             session<=session_id;
