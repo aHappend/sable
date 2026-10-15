@@ -150,11 +150,34 @@ def main():
             (out / "stderr.log").write_text("")
         summary = f"{args.operation}: {'PASS' if code == 0 else 'FAIL'}; receipt={out.relative_to(ROOT)}/receipt.json\n"
         (out / "stdout.log").write_text(summary)
-        (out / "RESULTS.md").write_text(
-            "# Verification execution\n\n" + summary + "\n" +
-            "This is executed self-check evidence, not independent engineering acceptance. "
-            "Actual source identifiers, commands, versions, exits and run counts are in receipt.json. "
-            "Tool/call billing is unavailable. No physical signoff is claimed.\n")
+        report = [
+            "# Verification execution", "", summary.strip(), "",
+            "**Evidence level:** executed project self-check; independent engineering acceptance remains the shared runtime's decision.",
+            "", "Command: `" + " ".join(record["argv"]) + "`",
+            "", "Working directory: `" + record["cwd"] + "`",
+            "", f"Exit: {code}. Elapsed: {record['finished_at'] - start:.3f} seconds. Tool/call billing: unavailable.",
+            "", "Tool versions (complete raw version output is in receipt.json):", ""]
+        for name, version in record["tool_versions"].items():
+            lines = (version["stdout"] or version["stderr"]).splitlines()
+            report.append("- " + name + ": " + (lines[0] if lines else "no version text"))
+        report += ["", "## Run ledger", "",
+                   f"Required behavior rows: {len(ledger)}; passed: {sum(row['state'] == 'passed' for row in ledger)}.",
+                   "", "| Run | Outcome | Raw coverage | Simulation receipt |",
+                   "|---|---|---|---|"]
+        for row in ledger:
+            report.append(f"| {row['run']} | {row['state']} | {row['coverage']} | {row['receipt'] or 'see child command receipts'} |")
+        report += ["", "## Actual results", "", "```json", json.dumps(results, indent=2), "```",
+                   "", "## Source identity", "", "```json", json.dumps(source, indent=2), "```",
+                   "", "## Limits", "",
+                   "Compilation, self-check success, and independent acceptance are distinct. "
+                   "The finite seeded campaign is not exhaustive or formal proof. "
+                   "Correct delivery relies on specified finite faults, service fairness, unique paired sessions, "
+                   "and exclusion of undetected CRC collisions. Generic memory-retaining synthesis is not "
+                   "technology mapping, measured physical PPA, timing closure or chip signoff. "
+                   "Raw logs, timeout/exit records, vectors and first mismatches are retained alongside this report."]
+        if code:
+            report += ["", "## Failure / first mismatch", "", "```text", record["failure"], "```"]
+        (out / "RESULTS.md").write_text("\n".join(report) + "\n")
         print(summary, end="")
     return code
 
