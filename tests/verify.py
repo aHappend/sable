@@ -84,14 +84,15 @@ def main():
                 child.mkdir()
                 argv = ["python3", "tests/verify.py", "negative-child", "--mode", "2",
                         "--mutant", mutant, "--out", str(child)]
-                import subprocess
-                with (child / "stdout.log").open("w") as so, (child / "stderr.log").open("w") as se:
-                    p = subprocess.run(argv, cwd=ROOT, stdout=so, stderr=se, timeout=45)
-                text = (child / "stderr.log").read_text()
-                assert p.returncode != 0 and marker in text, ("NEGATIVE_NOT_DETECTED", mutant, p.returncode, text)
+                execution = command(child, "checker", argv, timeout=45, allow_failure=True)
+                text = (child / "checker.stderr").read_text()
+                assert execution["exit_code"] != 0 and marker in text, (
+                    "NEGATIVE_NOT_DETECTED", mutant, execution["exit_code"], text)
                 injections = list(child.glob("negative-child-*/run/injection.json"))
                 assert len(injections) == 1, ("missing actual handshake injection", mutant)
-                results.append(dict(mutant=mutant, exit_code=p.returncode, mismatch=marker,
+                injected = json.loads(injections[0].read_text())
+                assert injected["cycle"] > 0 and injected["original"] ^ injected["corrupted"] == 1
+                results.append(dict(mutant=mutant, exit_code=execution["exit_code"], mismatch=marker,
                                     injection=str(injections[0].relative_to(out))))
         elif args.operation == "reproduce":
             clean = out / "source"

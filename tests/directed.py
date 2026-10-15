@@ -562,18 +562,11 @@ def parameters(out):
         command(out, label + "-compile", ["iverilog", "-g2012", "-Wall", "-s", "bridge",
                 f"-Pbridge.{param}={value}", "-o", binary, "tests/bridge.sv",
                 "rtl/sable_tx.sv", "rtl/sable_rx.sv", "rtl/sable_endpoint.sv"])
-        import time
-        start = time.time()
         argv = ["vvp", str(binary), "+INPUT=" + str(reset_vectors)]
-        p = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, timeout=5)
-        (out / (label + ".stdout")).write_text(p.stdout)
-        (out / (label + ".stderr")).write_text(p.stderr)
-        (out / (label + ".receipt.json")).write_text(json.dumps(dict(
-            argv=argv, cwd=str(ROOT), started_at=start, finished_at=time.time(),
-            timeout_s=5, timed_out=False, exit_code=p.returncode,
-            stdout=label + ".stdout", stderr=label + ".stderr"), indent=2))
-        assert p.returncode != 0 and "PARAMETER ERROR: " + param in p.stdout + p.stderr, (
-            "illegal parameter not explicitly rejected", param, value, p.returncode, p.stdout, p.stderr)
+        execution = command(out, label, argv, timeout=5, allow_failure=True)
+        text = (out / (label + ".stdout")).read_text() + (out / (label + ".stderr")).read_text()
+        assert execution["exit_code"] != 0 and "PARAMETER ERROR: " + param in text, (
+            "illegal parameter not explicitly rejected", param, value, execution["exit_code"], text)
         rejected.append([param, value])
     result = dict(name="parameter_matrix", outcome="passed", elaborated_and_reset=legal, explicitly_rejected=rejected)
     (out / "coverage.json").write_text(json.dumps(result, indent=2))

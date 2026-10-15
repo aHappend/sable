@@ -41,7 +41,7 @@ def versions():
     return result
 
 
-def command(out, name, argv, timeout=45, cwd=ROOT):
+def command(out, name, argv, timeout=45, cwd=ROOT, allow_failure=False):
     start = time.time()
     stdout = out / (name + ".stdout")
     stderr = out / (name + ".stderr")
@@ -58,6 +58,6 @@ def command(out, name, argv, timeout=45, cwd=ROOT):
                   exit_code=code, stdout=str(stdout.relative_to(out)),
                   stderr=str(stderr.relative_to(out)))
     (out / (name + ".receipt.json")).write_text(json.dumps(record, indent=2))
-    if code != 0 or timed_out:
+    if timed_out or (code != 0 and not allow_failure):
         raise RuntimeError(f"{name}: exit={code} timeout={timed_out}; see {out}")
     return record
