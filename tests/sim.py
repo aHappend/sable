@@ -51,6 +51,7 @@ class Sim:
                 "-o", self.out / "sim.vvp", "tests/bridge.sv",
                 *sorted(str(p.relative_to(ROOT)) for p in ROOT.glob("rtl/*.sv"))])
         self.start = time.time()
+        self.timed_out = False
         self.err = (self.out / "simulation.stderr").open("w")
         self.raw = (self.out / "simulation.stdout").open("w")
         self.inputs = (self.out / "vectors.txt").open("w")
@@ -81,6 +82,7 @@ class Sim:
         self.p.stdin.write(line)
         self.p.stdin.flush()
         if not select.select([self.p.stdout], [], [], 10)[0]:
+            self.timed_out = True
             self.p.terminate()
             raise RuntimeError("SIMULATION_RESPONSE_TIMEOUT")
         line = self.p.stdout.readline()
@@ -184,7 +186,7 @@ class Sim:
         self.inputs.close()
         self.err.close()
         record = dict(argv=self.argv, cwd=str(ROOT), config=self.config, started_at=self.start,
-                      finished_at=time.time(), exit_code=code, timed_out=False, cycles=self.cycle,
+                      finished_at=time.time(), exit_code=code, timed_out=self.timed_out, cycles=self.cycle,
                       stdout="simulation.stdout", stderr="simulation.stderr", vectors="vectors.txt",
                       comparisons=dict(self.comparisons))
         (self.out / "simulation.receipt.json").write_text(json.dumps(record, indent=2))

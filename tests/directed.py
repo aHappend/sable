@@ -121,6 +121,12 @@ def ack_integrity(out):
     try:
         b.application(b"123456789")
         b.until(lambda: len(b.frames) == 1)
+        from model import crc32c
+        words = b.frames[0][1]
+        prefix = b"".join(d.to_bytes(8, "little") for d, _, _, _ in words[:3])
+        # Remove the protected prefix's affine CRC contribution, using public wire bytes.
+        payload_crc = words[-1][0] ^ crc32c(prefix + bytes(9)) ^ crc32c(bytes(9))
+        assert payload_crc == 0xe3069283, ("RTL_STANDARD_VECTOR", hex(payload_crc))
         valid = frame(1, 0, b.sim.session, 0)
         from scenarios import corrupted
         tested = []
@@ -141,7 +147,8 @@ def ack_integrity(out):
         b.idle(20)
         assert len(b.status) == 1
         return b.result("ACK_integrity", single_bit_rejected_bytes=tested,
-                        wrong_session=True, future=True, wrong_stream=True, duplicate=True)
+                        wrong_session=True, future=True, wrong_stream=True, duplicate=True,
+                        RTL_standard_vector_crc=hex(payload_crc))
     finally:
         b.sim.close()
 
@@ -563,7 +570,9 @@ def parameters(out):
         assert p.returncode != 0 and "PARAMETER ERROR: " + param in p.stdout + p.stderr, (
             "illegal parameter not explicitly rejected", param, value, p.returncode, p.stdout, p.stderr)
         rejected.append([param, value])
-    return dict(name="parameter_matrix", outcome="passed", elaborated_and_reset=legal, explicitly_rejected=rejected)
+    result = dict(name="parameter_matrix", outcome="passed", elaborated_and_reset=legal, explicitly_rejected=rejected)
+    (out / "coverage.json").write_text(json.dumps(result, indent=2))
+    return result
 
 
 def directed(out, max_cycles):

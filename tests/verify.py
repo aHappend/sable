@@ -8,6 +8,7 @@ import sys
 import time
 import traceback
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from retain import ROOT, command, fresh, inventory, versions
 from scenarios import run_transport
@@ -39,6 +40,7 @@ def main():
                   acceptance_evidence=False, cost="unavailable")
     code = 0
     results = []
+    planned = []
     try:
         if args.operation in ("probe", "negative-child"):
             if args.case:
@@ -56,6 +58,12 @@ def main():
                 results.append(run_transport(out / "run", args.seeds[0], args.mode,
                                              args.max_cycles, smoke=not args.full, mutant=args.mutant))
         elif args.operation == "behavior":
+            planned = [f"seed{seed}-mode{mode}" for seed in args.seeds for mode in (0, 1, 2)]
+            planned += ["window", "ack-integrity", "rx-integrity", "mailbox", "receive-fairness",
+                        "rx-resources/reverse", "rx-resources/fifo", "timers/coincident",
+                        "timers/in_retransmit", "timers/public_crc_stall", "timers/exhaust",
+                        "ambiguity", "resets/mode0", "resets/mode1", "resets/mode2",
+                        "wrap-default", "identity-exhaustion", "rx-wrap", "parameters"]
             from concurrent.futures import ProcessPoolExecutor
             with ProcessPoolExecutor(max_workers=3) as pool:
                 jobs = [pool.submit(seeded_runs, out, seed, args.max_cycles) for seed in args.seeds]
@@ -63,6 +71,8 @@ def main():
                     results.extend(job.result())
             from directed import directed
             results.extend(directed(out, args.max_cycles))
+            for name in planned:
+                assert (out / name / "coverage.json").is_file(), ("MISSING_REQUIRED_RUN", name)
         elif args.operation == "synthesis":
             from synthesis import synthesis
             results.append(synthesis(out))
@@ -100,6 +110,20 @@ def main():
         print(record["failure"], file=sys.stderr)
         (out / "stderr.log").write_text(record["failure"])
     finally:
+        ledger = []
+        for name in planned:
+            coverage = out / name / "coverage.json"
+            receipt = out / name / "simulation.receipt.json"
+            if coverage.exists():
+                quantity = json.loads(coverage.read_text())
+                state = quantity["outcome"]
+            else:
+                quantity = None
+                state = "failed" if receipt.exists() else "not_completed_or_not_executed"
+            ledger.append(dict(run=name, state=state, measured=quantity,
+                               coverage=str(coverage.relative_to(out)),
+                               receipt=str(receipt.relative_to(out)) if receipt.exists() else None))
+        (out / "ledger.json").write_text(json.dumps(ledger, indent=2))
         record.update(finished_at=time.time(), exit_code=code, results=results)
         (out / "receipt.json").write_text(json.dumps(record, indent=2))
         if not (out / "stderr.log").exists():
