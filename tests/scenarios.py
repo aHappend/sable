@@ -159,6 +159,9 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
     highest_occupancy = [collections.Counter(), collections.Counter()]
     rx_expected = set()
     rx_acknowledged = set()
+    received_packets = [collections.defaultdict(dict), collections.defaultdict(dict)]
+    receive_base = [collections.Counter(), collections.Counter()]
+    packet_arrival = [{}, {}]
 
     def rx_enqueue(words, identity, due=0):
         from model import decode
@@ -255,6 +258,13 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                         else:
                             if incoming_decoded["kind"] == 1:
                                 acked[node][incoming_decoded["stream"]].add(incoming_decoded["identity"])
+                            else:
+                                s = incoming_decoded["stream"]
+                                part = incoming_decoded["offset"] // 256
+                                base = incoming_decoded["identity"] - part
+                                key = s, base, incoming_decoded["length"]
+                                received_packets[node][key].setdefault(incoming_decoded["offset"], sim.cycle)
+                                packet_arrival[node].setdefault((s, incoming_decoded["identity"]), sim.cycle)
                             counts["actual_valid_input_frames"] += 1
                         incoming_frames[node] = []
                     # Observe actual overtaking, not only randomized scheduling labels.
@@ -281,8 +291,18 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                         deadlines[node, s, send_index[node][s]] = cycle + max_cycles
                     current[node] = None
                 if mode != 0 and node < nodes:
+                    if o["mv"] and o["mf"]:
+                        s = o["ms"]
+                        key = s, receive_base[node][s], o["mn"]
+                        arrivals = received_packets[node][key]
+                        required_offsets = set(range(0, o["mn"], 256))
+                        assert required_offsets <= arrivals.keys(), ("DELIVERY_BEFORE_ALL_VALID_CRC", key, arrivals)
+                        assert sim.cycle >= max(arrivals[offset] for offset in required_offsets) + 2, (
+                            "REGISTERED_RX_LATENCY", sim.cycle, key, arrivals)
                     before = dict(oracles[node].completed)
                     oracles[node].observe(o, drive[7])
+                    if o["mv"] and drive[7] and o["ml"]:
+                        receive_base[node][o["ms"]] += (o["mn"] + 255) // 256
                     if mode == 1:
                         for s in range(4):
                             if oracles[node].completed[s] > before.get(s, 0):
@@ -346,8 +366,11 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                         fault_packet(wires[1 - node], words, d, cycle, attempts[node], counts, rng, decisions, not smoke)
                 else:
                     counts["ack_compares"] += 1
+                    key = d["stream"], d["identity"]
+                    assert key in packet_arrival[node], ("ACK_BEFORE_VALID_DATA", node, key)
+                    assert d["start_cycle"] >= packet_arrival[node][key] + 2, (
+                        "REGISTERED_ACK_LATENCY", node, d, packet_arrival[node][key])
                     if mode == 1:
-                        key = d["stream"], d["identity"]
                         assert key in rx_expected, ("ACK_FOR_UNSENT_MODEL_DATA", key)
                         rx_acknowledged.add(key)
                     if mode == 2:

@@ -61,6 +61,7 @@ class Sim:
         self.session = 0x1234abcd
         self.stall = {}
         self.frames = [[], []]
+        self.frame_start = [0, 0]
         self.history = []
         self.mutant = mutant
         self.mutated = False
@@ -148,10 +149,13 @@ class Sim:
                     assert (node, stream) in self.application_complete
                     assert self.cycle >= self.application_complete[node, stream] + 2, (
                         "REGISTERED_TX_LATENCY", self.cycle, self.application_complete[node, stream])
+                if beat[2]:
+                    self.frame_start[node] = self.cycle
                 self.frames[node].append(beat)
                 if beat[-1]:
                     words = self.frames[node]
                     decoded = decode(words)
+                    decoded["start_cycle"] = self.frame_start[node]
                     emitted.append((node, words, decoded))
                     self.history.append((self.cycle, node, decoded))
                     self.frames[node] = []
