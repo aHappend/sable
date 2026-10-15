@@ -19,6 +19,17 @@ def seeded_runs(out, seed, max_cycles):
             for mode in (0, 1, 2)]
 
 
+def source_bundle(out, source):
+    clean = out / "source"
+    clean.mkdir()
+    for name in source:
+        target = clean / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / name, target)
+    assert inventory(clean) == source
+    return clean
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("operation", choices=("behavior", "negative", "synthesis", "reproduce", "probe", "negative-child"))
@@ -43,7 +54,12 @@ def main():
     planned = []
     try:
         if args.operation in ("probe", "negative-child"):
-            if args.case:
+            if args.case == "portable":
+                clean = source_bundle(out, source)
+                command(out, "clean-smoke", ["python3", "tests/verify.py", "probe",
+                        "--mode", "2", "--out", "evidence/smoke"], timeout=35, cwd=clean)
+                results.append(dict(outcome="passed", source_only_smoke=True))
+            elif args.case:
                 import directed
                 cases = {"window": directed.window, "ack": directed.ack_integrity,
                          "rx": directed.rx_integrity, "mailbox": directed.mailbox,
@@ -53,7 +69,8 @@ def main():
                          "wrap": lambda p: directed.wrap(p, 24, 260),
                          "exhaust": lambda p: directed.wrap(p, 1, 512),
                          "atomic-exhaust": lambda p: directed.wrap(p, 1, 504, 4096),
-                         "fairness": directed.receive_fairness}
+                         "fairness": directed.receive_fairness,
+                         "ack-independence": directed.endpoint_ack_independence}
                 results.append(cases[args.case](out / "run"))
             else:
                 results.append(run_transport(out / "run", args.seeds[0], args.mode,
@@ -61,6 +78,7 @@ def main():
         elif args.operation == "behavior":
             planned = [f"seed{seed}-mode{mode}" for seed in args.seeds for mode in (0, 1, 2)]
             planned += ["window", "ack-integrity", "rx-integrity", "mailbox", "receive-fairness",
+                        "endpoint-ack-independence",
                         "rx-resources/reverse", "rx-resources/fifo", "timers/coincident",
                         "timers/in_retransmit", "timers/public_crc_stall", "timers/exhaust",
                         "ambiguity", "resets/mode0", "resets/mode1", "resets/mode2",
@@ -95,13 +113,7 @@ def main():
                 results.append(dict(mutant=mutant, exit_code=execution["exit_code"], mismatch=marker,
                                     injection=str(injections[0].relative_to(out))))
         elif args.operation == "reproduce":
-            clean = out / "source"
-            clean.mkdir()
-            for name in source:
-                target = clean / name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(ROOT / name, target)
-            assert inventory(clean) == source
+            clean = source_bundle(out, source)
             command(out, "clean-smoke", ["python3", "tests/verify.py", "probe",
                     "--mode", "2", "--out", "evidence/smoke"], timeout=45, cwd=clean)
             command(out, "clean-synthesis", ["python3", "tests/verify.py", "synthesis",

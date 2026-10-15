@@ -2,10 +2,9 @@
 import collections
 import itertools
 import json
-import subprocess
 
 from model import beats, frame
-from retain import ROOT, command
+from retain import command
 from scenarios import MessageOracle
 from sim import Sim, vector
 
@@ -391,6 +390,39 @@ def receive_fairness(out):
         b.sim.close()
 
 
+def endpoint_ack_independence(out):
+    b = Bench(out, mode=2)
+    try:
+        b.mr = 0
+        tx_data = bytes(i % 239 for i in range(4096))
+        rx_data = bytes(i % 251 for i in range(4096))
+        b.application(tx_data)
+        data_frames = lambda: [d for _, _, d in b.frames if d["kind"] == 0]
+        ack_frames = lambda: [d for _, _, d in b.frames if d["kind"] == 1]
+        b.until(lambda: len(data_frames()) == 8)
+        assert {d["identity"] for d in data_frames()} == set(range(8))
+        for identity in range(16):
+            b.wire(frame(0, 0, b.sim.session, identity, rx_data, identity * 256))
+        b.until(lambda: b.last["mv"] and len(ack_frames()) >= 16)
+        assert not b.app and {d["identity"] for d in data_frames()} == set(range(8))
+        assert {d["identity"] for d in ack_frames()} == set(range(16))
+        b.wire(frame(0, 0, b.sim.session, 16, b"next"))
+        b.idle(20)
+        assert all(d["identity"] != 16 for d in ack_frames())
+        # This ACK follows a drained resource-rejected DATA frame.
+        b.wire(frame(1, 0, b.sim.session, 0))
+        b.until(lambda: any(d["identity"] == 8 for d in data_frames()))
+        for d in data_frames():
+            assert d["payload"] == tx_data[d["offset"]:d["offset"] + 256]
+        assert not b.status
+        return b.result("endpoint_ACK_independence", full_TX_window=8,
+                        ACKs_sent_while_TX_full=16, full_RX_message_bytes=4096,
+                        rejected_DATA_did_not_block_following_ACK=True,
+                        TX_window_advanced_after_ACK=True)
+    finally:
+        b.sim.close()
+
+
 def wrap(out, generation, count, exhausted_message_length=1):
     b = Bench(out, mode=0, generation=generation)
     old = None
@@ -576,7 +608,8 @@ def parameters(out):
 def directed(out, max_cycles):
     results = [window(out / "window"), ack_integrity(out / "ack-integrity"),
                rx_integrity(out / "rx-integrity"), mailbox(out / "mailbox"),
-               receive_fairness(out / "receive-fairness")]
+               receive_fairness(out / "receive-fairness"),
+               endpoint_ack_independence(out / "endpoint-ack-independence")]
     results.extend(reverse_and_fifo(out / "rx-resources"))
     results.extend(timers(out / "timers"))
     results.append(ambiguity(out / "ambiguity"))

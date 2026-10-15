@@ -151,10 +151,7 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
     identities = [{}, {}]
     current = [None, None]
     round_robin = [0, 0]
-    outstanding = [set(), set()]
-    oldest = [collections.Counter(), collections.Counter()]
     acked = [collections.defaultdict(set), collections.defaultdict(set)]
-    last_sequence = {}
     observed_reorder = collections.Counter()
     received_order = {}
     nodes = 2 if mode == 2 else 1

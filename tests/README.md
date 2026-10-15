@@ -101,6 +101,7 @@ Paths below are relative to a behavior attempt unless otherwise specified.
 | Eight reverse-order retained RX slots; missing oldest and future ninth | `reverse_and_fifo` | `rx-resources/reverse/coverage.json` |
 | Full ACK FIFO, drops without data loss, duplicate re-ACK recovery | `reverse_and_fifo` | `rx-resources/fifo/coverage.json` |
 | Complete-message ownership, blocked stream and other-stream progress | `receive_fairness` | `receive-fairness/coverage.json` |
+| ACK generation with full DATA TX window; resource-rejected DATA drains before a following valid ACK | `endpoint_ack_independence` | `endpoint-ack-independence/coverage.json` |
 | Four completion mailboxes retain statuses under blocking | `mailbox` | `mailbox/coverage.json` |
 | ACK at timeout threshold; ACK during held retransmission; memory retained through drain | `timers` | `timers/*/coverage.json` |
 | Timer starts only on actual public CRC handshake | `timers` | `timers/public_crc_stall/coverage.json` |
@@ -151,6 +152,10 @@ Original failures remain at:
   `evidence/preparation/synthesis-20261015T102847Z-d8acfe96/receipt.json`.
 - `evidence/preparation/diagnostic-022647ad7636/receipt.json`: overly long
   preparation campaign hit its 65-second wrapper limit; never counted as pass.
+- `evidence/preparation/probe-20261015T102847Z-01b02aec/receipt.json` and
+  `evidence/preparation/probe-20261015T102847Z-d2e3b308/receipt.json`: missing
+  parent evidence directories; repaired with recursive parent creation for
+  new attempt directories, without overwriting prior attempts.
 - `evidence/preparation/probe-20261015T102939Z-3f0bbea7/receipt.json`:
   reset observation raced input changes on the same falling-edge timestep.
   The separated-edge repair is retained at
