@@ -16,7 +16,7 @@ module bridge;
         wire [7:0] ik,lk;
         wire [1:0] istr;
         wire [12:0] ilen;
-        assign {iv,id,ik,ifi,ila,istr,ilen,mr,sr,lr,lv,ld,lk,lf,ll}=drive[g][168:0];
+        assign {iv,id,ik,ifi,ila,istr,ilen,mr,sr,lr,lv,ld,lk,lf,ll}=drive[g][167:0];
         wire ir,mv,mf,ml,sv,tv,tf,tl,rr;
         wire [63:0] md,td;
         wire [7:0] mk,tk;

@@ -33,6 +33,13 @@ also be replayed with `vvp <attempt>/sim.vvp < <attempt>/vectors.txt`.
 measured quantities and paths; the ledger includes failed/not-completed runs
 rather than dropping them from the denominator. A nonzero exit is a failure,
 unless explicitly expected and independently recognized by the negative parent.
+Overall execution timeout belongs to the caller/shared runtime; current root
+receipts therefore leave `timeout_s` null. Child compiler, response and Yosys
+timeouts are explicit. Early preparation root receipts recorded an intended
+110-second bookkeeping budget without an overall script watchdog; that field
+is not evidence of an enforced timeout. Their outer `diagnostic-*/receipt.json`
+records contain the actual 65-second preparation watchdog. Those original
+receipts remain unchanged.
 
 The behavior command runs three independent seeded jobs, each executing TX,
 RX, then paired endpoints; it then executes all directed cases. Parallelism

@@ -45,9 +45,10 @@ def main():
     out = fresh(args.out.resolve(), args.operation)
     source = inventory()
     start = time.time()
-    record = dict(argv=[sys.executable, *sys.argv], cwd=str(ROOT), source_sha256=source,
+    record = dict(argv=[sys.executable, *sys.argv], cwd=str(pathlib.Path.cwd()), source_sha256=source,
                   tool_versions=versions(), started_at=start, repair_of=args.repair_of,
-                  timeout_s=110, timed_out=False, stdout="stdout.log", stderr="stderr.log",
+                  timeout_s=None, timeout_owner="caller/shared runtime", timed_out=False,
+                  stdout="stdout.log", stderr="stderr.log",
                   acceptance_evidence=False, cost="unavailable")
     code = 0
     results = []

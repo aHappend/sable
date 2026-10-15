@@ -191,6 +191,7 @@ class Sim:
         self.err.close()
         record = dict(argv=self.argv, cwd=str(ROOT), config=self.config, started_at=self.start,
                       finished_at=time.time(), exit_code=code, timed_out=self.timed_out, cycles=self.cycle,
+                      timeout_s=None, response_timeout_s=10,
                       stdout="simulation.stdout", stderr="simulation.stderr", vectors="vectors.txt",
                       comparisons=dict(self.comparisons))
         (self.out / "simulation.receipt.json").write_text(json.dumps(record, indent=2))
