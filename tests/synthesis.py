@@ -11,7 +11,7 @@ def synthesis(out):
     script.write_text(
         "read_verilog -sv " + " ".join(str(p.relative_to(ROOT)) for p in sorted(ROOT.glob("rtl/*.sv"))) + "\n"
         "hierarchy -check -top sable_endpoint\n"
-        "synth -top sable_endpoint -run begin:fine\n"
+        "synth -top sable_endpoint -noshare -run begin:fine\n"
         "check -assert\nstat\n"
         f"write_json {design}\n")
     command(out, "yosys", ["yosys", "-Q", "-T", "-s", script], timeout=60)

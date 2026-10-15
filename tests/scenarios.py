@@ -92,13 +92,14 @@ def fault_packet(wire, words, decoded, cycle, attempts, counts, rng, decisions, 
     # At most two unavailable events per DATA identity across DATA + ACK.
     identity = decoded["identity"]
     action = "deliver"
-    if faults and not decoded["kind"] and attempt == 0 and identity % 5 == 0:
+    unavailable = faults and identity < 16
+    if unavailable and not decoded["kind"] and attempt == 0 and identity % 5 == 0:
         counts[kind + "_drop"] += 1
         action = "drop"
-    elif faults and decoded["kind"] and attempt == 0 and identity % 5 == 1:
+    elif unavailable and decoded["kind"] and attempt == 0 and identity % 5 == 1:
         counts[kind + "_drop"] += 1
         action = "drop"
-    elif faults and attempt == 0 and identity % 5 in (2, 3):
+    elif unavailable and attempt == 0 and identity % 5 in (2, 3):
         field = (identity // 5 + decoded["stream"]) % 3
         if field == 0:
             byte = (4, 8, 12, 16, 18, 20)[rng.randrange(6)]

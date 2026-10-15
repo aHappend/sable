@@ -23,6 +23,7 @@ def main():
     parser.add_argument("--mutant", choices=("data", "status"))
     parser.add_argument("--repair-of")
     parser.add_argument("--full", action="store_true")
+    parser.add_argument("--case")
     args = parser.parse_args()
     out = fresh(args.out.resolve(), args.operation)
     source = inventory()
@@ -35,8 +36,17 @@ def main():
     results = []
     try:
         if args.operation in ("probe", "negative-child"):
-            results.append(run_transport(out / "run", args.seeds[0], args.mode,
-                                         args.max_cycles, smoke=not args.full, mutant=args.mutant))
+            if args.case:
+                import directed
+                cases = {"window": directed.window, "ack": directed.ack_integrity,
+                         "rx": directed.rx_integrity, "mailbox": directed.mailbox,
+                         "resources": directed.reverse_and_fifo, "timers": directed.timers,
+                         "ambiguity": directed.ambiguity, "resets": directed.resets,
+                         "rx-wrap": directed.rx_wrap, "parameters": directed.parameters}
+                results.append(cases[args.case](out / "run"))
+            else:
+                results.append(run_transport(out / "run", args.seeds[0], args.mode,
+                                             args.max_cycles, smoke=not args.full, mutant=args.mutant))
         elif args.operation == "behavior":
             for seed in args.seeds:
                 for mode in (0, 1, 2):
