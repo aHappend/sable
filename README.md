@@ -1,3 +1,73 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/logo-dark.svg">
+    <img src="brand/logo.svg" width="480" alt="Vulcan">
+  </picture>
+</p>
+
+<h1 align="center">SABLE · Segmented Acknowledged Buffered Link Engine</h1>
+
+<p align="center">
+  Open synthesizable multi-stream reliable message transport RTL. Real engineering results.
+  <br>
+  <a href="https://ahappend.github.io/vulcan/">Visit the website</a>
+  · <a href="https://github.com/aHappend/vulcan-showcase">Vulcan Showcase</a>
+  · <a href="README.zh-CN.md">中文</a>
+  · <a href="OBJECTIVE.md">Task Specification</a>
+  · <a href="design/">Architecture & Spec</a>
+  · <a href="rtl/">RTL Modules</a>
+  · <a href="brand/">Brand assets</a>
+</p>
+
+**SABLE** (*Segmented Acknowledged Buffered Link Engine*) is a synthesizable single-clock multi-stream reliable message transport engine in SystemVerilog, engineered autonomously from a blank workspace by **Vulcan 0.8** under a controlled 1:1 head-to-head hardware engineering benchmark (`aHappend/sable`).
+
+## Project Status & Deliverable Summary
+
+| Metric | Value |
+| --- | --- |
+| **Autonomous Engine** | **Vulcan 0.8** (`gpt-6.1-sol`, autonomous `no_operator_assumption` workflow) |
+| **Current Engineering Status** | Phase: `designer` (Step 2) — Autonomous RTL & Verification in Progress |
+| **Synthesizable RTL (`rtl/*.sv`)** | **3 modules / 961 lines** |
+| **Architecture & Protocol Docs (`design/*.md`)** | **2 files** ([`design/ARCHITECTURE.md`](design/ARCHITECTURE.md), [`design/SPEC.md`](design/SPEC.md)) |
+| **Verification & Reference Suite (`tests/*`)** | **0 files** |
+| **Product Whitepaper (`REPORT.pdf`)** | Pending independent verification sign-off |
+| **Last Synchronized** | `2026-10-15 18:16:22 UTC+8` |
+
+## System Architecture & Protocol Specification
+
+| Subsystem / Dimension | Specification Requirement | Hardware Engineering Realization |
+| --- | --- | --- |
+| **1. Datapath & Multi-Stream Interface** | Single clock, 64-bit `ready`/`valid` interface, **4 independent streams**, message length **1–4096 B**, max frame payload **256 B** (excluding header & CRC), non-aligned tail byte handling | Per-stream ingress segmentation, byte-enable (`keep`) tail qualification, and fair round-robin stream arbitration |
+| **2. Per-Stream Sliding Send Window** | **8 unacknowledged packets per stream** (`window_depth = 8`), concurrent in-flight packets (no degeneration to stop-and-wait) | Dedicated per-stream 8-slot selective-repeat / sliding-window scoreboard, retry payload buffers, and independent per-stream timers |
+| **3. Integrity Protection (CRC-32C)** | **CRC-32C** (Castagnoli `0x1EDC6F41`, `init=0xFFFFFFFF`, `refin=true`, `refout=true`, `xorout=0xFFFFFFFF`) protecting stream ID, sequence number, message boundaries, payload, and ACK semantics | Synthesizable CRC-32C generator/checker covering both DATA and ACK/control frames, verified against standard check vector `"123456789" -> 0xE3069283` |
+| **4. Receiver Out-of-Order & Reassembly** | Integrity check, **8-slot out-of-order buffer per stream**, duplicate suppression, complete-message reassembly, and ordered per-stream delivery | Per-stream bitmap & reassembly buffer, independent ACK FIFO decoupler (preventing ACK deadlock when TX window is full) |
+| **5. Resource Bounds, Wrap & Reset** | Finite queues/buffers, backpressure & exhaustion handling, sequence wrap-around isolation, simultaneous timeout+ACK priority, bounded retry exhaustion (`UNACKNOWLEDGED` reporting), and in-flight reset | Session/generation isolation across sequence wrap-around and reset, explicit `UNACKNOWLEDGED` completion status without false positive delivery claims |
+| **6. Independent Verification & Synthesis** | Protocol-level reference oracle (not copied RTL), standalone TX + standalone RX + end-to-end fault-injection link model (drop, dup, reorder, corrupt, delay, backpressure), ≥3 fixed random seeds, negative error-injection sensitivity, and Yosys generic synthesis | Self-checking simulation (`iverilog -g2012` / `vvp`) + `yosys` synthesis (`hierarchy -check; proc; opt; check -assert; stat`) |
+
+## Delivered RTL Inventory
+
+| Module File | Size | Role |
+| --- | --- | --- |
+| [`rtl/sable_endpoint.sv`](rtl/sable_endpoint.sv) | `147` lines (`6026` B) | Synthesizable SystemVerilog RTL module |
+| [`rtl/sable_rx.sv`](rtl/sable_rx.sv) | `401` lines (`16367` B) | Synthesizable SystemVerilog RTL module |
+| [`rtl/sable_tx.sv`](rtl/sable_tx.sv) | `413` lines (`16768` B) | Synthesizable SystemVerilog RTL module |
+
+## Repository Layout
+
+```text
+.
+├── OBJECTIVE.md         # Exact prompt & 6-part SABLE specification given to both 1:1 arms
+├── design/              # Frozen interface specification (SPEC.md) & microarchitecture (ARCHITECTURE.md)
+├── rtl/                 # Synthesizable SystemVerilog RTL modules (sable_endpoint.sv, sable_tx.sv, sable_rx.sv, ...)
+├── tests/               # Independent protocol reference model, fault-injection link & verification suite
+├── brand/               # Showcase visual identity assets
+└── REPORT.pdf           # Independently reviewed product technical report (generated upon verification sign-off)
+```
+
+## Technical Integration & Verification Notes (Authored by Autonomous Designer)
+
+Full standalone integration manual: [`DESIGN_README.md`](DESIGN_README.md)
+
 # SABLE
 
 **Segmented Acknowledged Buffered Link Engine** is a single-clock,
@@ -96,3 +166,7 @@ loss or backpressure can produce failure or no progress.
 This engine is not TCP, RDMA, PCIe, a CPU, an operating system, a physical
 network interface, or nonvolatile storage. Generic synthesis is not timing
 closure, physical chip signoff, FPGA board validation or measured PPA.
+
+## License
+
+Published code, documentation and artwork are provided under the [MIT License](LICENSE).
