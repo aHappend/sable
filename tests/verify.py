@@ -66,6 +66,7 @@ def main():
                          "rx": directed.rx_integrity, "mailbox": directed.mailbox,
                          "resources": directed.reverse_and_fifo, "timers": directed.timers,
                          "ambiguity": directed.ambiguity, "resets": directed.resets,
+                         "reset-phase-witness": directed.reset_phase_witness,
                          "rx-wrap": directed.rx_wrap, "parameters": directed.parameters,
                          "wrap": lambda p: directed.wrap(p, 24, 260),
                          "exhaust": lambda p: directed.wrap(p, 1, 512),
@@ -85,6 +86,8 @@ def main():
                         "ambiguity", "resets/mode0", "resets/mode1", "resets/mode2",
                         "wrap-default", "identity-exhaustion", "atomic-identity-exhaustion",
                         "rx-wrap", "parameters"]
+            from directed import RESET_PHASE_CASES
+            planned += ["reset-phase-witness/" + case for case in RESET_PHASE_CASES]
             from concurrent.futures import ProcessPoolExecutor
             with ProcessPoolExecutor(max_workers=3) as pool:
                 jobs = [pool.submit(seeded_runs, out, seed, args.max_cycles) for seed in args.seeds]

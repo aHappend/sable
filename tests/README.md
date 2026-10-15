@@ -114,7 +114,8 @@ Paths below are relative to a behavior attempt unless otherwise specified.
 | Timer starts only on actual public CRC handshake | `timers` | `timers/public_crc_stall/coverage.json` |
 | Exactly five sends for four retries; failure closes only affected stream | `timers` | `timers/exhaust/coverage.json` |
 | UNACKNOWLEDGED despite actual receiver delivery | `ambiguity`, paired RTL, zero retries | `ambiguity/coverage.json` |
-| Partial input/frame, pending ACK/output/status reset; stale sessions and fragments | `resets` on TX/RX/endpoint | `resets/mode*/coverage.json` |
+| Legacy cancellation at input/header and pending output/status; stale sessions | `resets` on TX/RX/endpoint (wait offsets are not wire-phase coverage) | `resets/mode*/coverage.json` |
+| Actual DATA payload transfer before CRC, stalled TX CRC, partial ACK header, endpoint input/output frame locks at reset | `reset_phase_witness`, six mandatory cases | `reset-phase-witness/*/witness.json`, `coverage.json`, raw vectors/trace and behavior ledger |
 | Sequence 255->0, late old ACK and DATA | `wrap`, `rx_wrap` with default generation | `wrap-default/`, `rx-wrap/` |
 | Complete identity never reused; whole-message allocation checked atomically | `wrap`, generation=1, 512 and 504 packets | `identity-exhaustion/`, `atomic-identity-exhaustion/` |
 | Eight legal parameter tuples and six explicit illegal rejections | `parameters` | `parameters/coverage.json` and individual receipts |
@@ -129,6 +130,35 @@ CRC must equal literal `e3069283`. ACK CRCs cover all 24 header bytes.
 Directed bit flips cover magic/type, stream, flags, lengths, session, sequence,
 generation, offsets, reserved fields, payload and CRC. Malformed frames with
 recomputed valid CRC also test structure independently of checksum rejection.
+
+`reset-phase-witness` supplements, rather than replaces, the original `resets`
+cancellation tests. Its reset preconditions come from actual public
+`valid && ready` observations: independent TX has transferred a DATA payload
+beat without CRC completion, or presents CRC with ready low; independent RX
+has accepted payload but not CRC; TX has accepted exactly two ACK header beats.
+Separate endpoint cases observe a DATA first beat and payload handshake without
+a tail handshake on ingress and egress, respectively, proving reset occurs
+while the corresponding frame lock is required. No internal state or elapsed
+wait offset establishes these preconditions; failure to observe one is fatal.
+
+Each case retains actual header/payload handshake cycles, CRC stall observations
+(empty when not applicable), old/new sessions, exact interrupted-frame suffix,
+and reset cycles in `witness.json`, including on failure. All public outputs are
+checked zero during both reset cycles by the existing strict pin monitor.
+The exact residual beats and complete old-session DATA/ACK frames are replayed
+after reset. In TX-capable cases, identity zero in the new session is already
+awaiting acknowledgment during this challenge, so an old ACK suffix cannot
+silently complete it. Stale traffic must produce no application delivery,
+positive ACK or status. A valid new ACK must then produce exactly one ACKED
+status; independent packet and byte oracles check new-session DATA delivery and
+ACK contents, followed by a drain interval rejecting duplicates. All six case
+coverage files are mandatory behavior ledger rows.
+
+The focused advisory entry uses the same implementation:
+
+```sh
+python3 tests/diagnose.py -- python3 tests/verify.py probe --case reset-phase-witness --out evidence/preparation
+```
 
 ## Synthesis scope and retained diagnostics
 

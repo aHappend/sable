@@ -475,7 +475,7 @@ def rx_wrap(out):
 
 def resets(out):
     results = []
-    # Offsets cover partial collection, header, payload, CRC, ACK and output stalls.
+    # Legacy cancellation cases; precise wire-phase witnesses are separate below.
     for mode, offsets in ((0, (0, 2, 5, 12, 45)), (1, (0, 2, 5, 10, 45)), (2, (0, 3, 8, 20, 70))):
         b = Bench(out / f"mode{mode}", mode=mode)
         try:
@@ -528,6 +528,152 @@ def resets(out):
             results.append(b.result("reset_cancellation", mode=mode, reset_offsets=list(offsets),
                                     stale_DATA_ACK_rejected=True, recovery_transactions=len(offsets)))
         finally:
+            b.sim.close()
+    return results
+
+
+RESET_PHASE_CASES = ("tx-payload", "tx-crc-stall", "rx-payload",
+                     "tx-partial-ack", "endpoint-input-lock", "endpoint-output-lock")
+
+
+def reset_phase_witness(out):
+    results = []
+    for case in RESET_PHASE_CASES:
+        mode = 1 if case == "rx-payload" else (2 if case.startswith("endpoint") else 0)
+        b = Bench(out / case, mode=mode)
+        witness = dict(case=case, mode=mode, outcome="not_completed", channels=[],
+                       reset_cycles=[], reset_public_zero_checks=0)
+        try:
+            old_session = b.sim.session
+            old_data = bytes(range(17))
+            old_words = frame(0, 0, old_session, 0, old_data)
+            old_ack = frame(1, 0, old_session, 0)
+            witness.update(old_session=old_session, new_session=old_session + 1)
+            b.mr = b.sr = 0
+            crc_stalls = []
+            if case in ("tx-payload", "tx-crc-stall", "endpoint-output-lock"):
+                b.application(old_data)
+                count = len(old_words) - 1 if case == "tx-crc-stall" else 4
+                b.until(lambda: len(b.output_beats) == count, bound=1000)
+                b.lr = 0
+                assert [beat[1:] for beat in b.output_beats] == old_words[:count]
+                assert b.output_beats[0][3] == 1 and not any(beat[-1] for beat in b.output_beats)
+                if case == "tx-crc-stall":
+                    for _ in range(1000):
+                        o = b.tick()
+                        if o["tv"] and o["tl"]:
+                            break
+                    else:
+                        raise AssertionError(("RESET_PHASE_NOT_REACHED", case, "CRC stall"))
+                    for _ in range(3):
+                        assert (b.last["tv"], b.lr) == (1, 0)
+                        assert tuple(b.last[k] for k in ("td", "tk", "tf", "tl")) == old_words[-1]
+                        crc_stalls.append(b.sim.cycle)
+                        if len(crc_stalls) < 3:
+                            b.tick()
+                interrupted = old_words
+                accepted = b.output_beats.copy()
+                direction = "TX.DATA" if mode == 0 else "endpoint.link_tx.DATA"
+            elif case == "tx-partial-ack":
+                b.application(old_data)
+                b.until(lambda: len(b.frames) == 1, bound=1000)
+                assert b.frames[0][1] == old_words
+                b.wire(old_ack[:2])
+                interrupted = old_ack
+                accepted = b.input_beats.copy()
+                direction = "TX.ACK"
+            else:
+                b.wire(old_words[:4])
+                interrupted = old_words
+                accepted = b.input_beats.copy()
+                direction = "RX.DATA" if mode == 1 else "endpoint.link_rx.DATA"
+            count = len(accepted)
+            assert [beat[1:] for beat in accepted] == interrupted[:count]
+            assert 0 < count < len(interrupted), ("RESET_PHASE_NOT_PARTIAL", case, accepted)
+            assert accepted[0][3] == 1 and not any(beat[-1] for beat in accepted)
+            if case == "tx-partial-ack":
+                assert count == 2, ("RESET_PHASE_NOT_REACHED", case, "partial ACK header")
+            else:
+                assert count >= 4, ("RESET_PHASE_NOT_REACHED", case, "payload handshake")
+            suffix = interrupted[count:]
+            witness["channels"].append(dict(
+                direction=direction, session=old_session, identity=0,
+                header_handshake_cycles=[beat[0] for beat in accepted[:3]],
+                payload_handshake_cycles=[beat[0] for beat in accepted[3:]],
+                crc_handshake_cycle=None, crc_stall_observation_cycles=crc_stalls,
+                accepted_beats=accepted, remaining_beats=suffix))
+            if case == "tx-partial-ack":
+                witness["completed_DATA_before_partial_ACK"] = b.output_beats.copy()
+            witness["phase_precondition_observed"] = True
+            (b.sim.out / "witness.json").write_text(json.dumps(witness, indent=2))
+
+            b.sim.session = old_session + 1
+            for _ in range(2):
+                obs, emitted = b.sim.step(rst=1)
+                assert not emitted and all(not any(o.values()) for o in obs)
+                witness["reset_cycles"].append(b.sim.cycle)
+                witness["reset_public_zero_checks"] += len(obs)
+            b.frames.clear()
+            b.app.clear()
+            b.status.clear()
+            b.input_beats.clear()
+            b.output_beats.clear()
+            b.mr = b.sr = b.lr = 1
+            b.tick()
+
+            new_tx = b"new TX epoch!"
+            new_rx = b"new RX epoch!"
+            if mode != 1:
+                b.application(new_tx)
+                b.until(lambda: len(b.frames) == 1, bound=1000)
+                assert b.frames[0][1] == frame(0, 0, b.sim.session, 0, new_tx)
+                assert not b.status, ("unexpected completion before stale ACK challenge", case)
+                witness["new_identity_zero_pending_cycle"] = b.sim.cycle
+            # Replay the exact unaccepted suffix, not a fabricated generic fragment.
+            # For interrupted DATA output, the link loops its residual beats to ingress.
+            b.wire(suffix)
+            b.wire(old_words)
+            b.wire(old_ack)
+            b.idle(40)
+            assert not b.app and not b.status, ("RESET_STALE_DELIVERY_OR_STATUS", case)
+            assert len(b.frames) == int(mode != 1), ("RESET_STALE_POSITIVE_ACK_OR_FRAME", case)
+            witness["stale_challenge"] = dict(
+                suffix=suffix, complete_old_DATA=old_words, complete_old_ACK=old_ack,
+                accepted_beats=b.input_beats.copy(), checked_through_cycle=b.sim.cycle,
+                application_beats=0, statuses=0, positive_ACKs=0)
+            if mode != 0:
+                b.wire(frame(0, 0, b.sim.session, 0, new_rx))
+            if mode != 1:
+                b.wire(frame(1, 0, b.sim.session, 0))
+            b.until(lambda: len(b.status) == int(mode != 1)
+                    and len(b.app) == (len(beats(new_rx)) if mode != 0 else 0)
+                    and len(b.frames) == (2 if mode == 2 else 1), bound=1000)
+            b.idle(80)
+            oracle = MessageOracle({s: [new_rx] if mode != 0 and s == 0 else []
+                                    for s in range(4)})
+            for _, o in b.app:
+                oracle.observe(o, 1)
+            assert oracle.done(), ("RESET_RECOVERY_NOT_DELIVERED", case)
+            assert [(s, code) for _, s, code in b.status] == ([(0, 0)] if mode != 1 else [])
+            expected_frames = []
+            if mode != 1:
+                expected_frames.append(frame(0, 0, b.sim.session, 0, new_tx))
+            if mode != 0:
+                expected_frames.append(frame(1, 0, b.sim.session, 0))
+            assert [words for _, words, _ in b.frames] == expected_frames, (
+                "RESET_RECOVERY_FRAME_MISMATCH", case, b.frames)
+            assert len(b.app) == (len(beats(new_rx)) if mode != 0 else 0)
+            assert b.last["fail"] == 0 and b.last["exhaust"] == 0
+            witness.update(outcome="passed", recovery_checked_through_cycle=b.sim.cycle,
+                           recovery_statuses=b.status, recovery_compared_RX_bytes=oracle.compared,
+                           recovery_compared_TX_bytes=len(new_tx) if mode != 1 else 0,
+                           recovery_frames=[dict(cycle=c, words=w) for c, w, _ in b.frames])
+            results.append(b.result("reset-phase-witness", **witness))
+        except Exception as error:
+            witness.update(outcome="failed", failure=repr(error), failure_cycle=b.sim.cycle)
+            raise
+        finally:
+            (b.sim.out / "witness.json").write_text(json.dumps(witness, indent=2))
             b.sim.close()
     return results
 
@@ -614,6 +760,7 @@ def directed(out, max_cycles):
     results.extend(timers(out / "timers"))
     results.append(ambiguity(out / "ambiguity"))
     results.extend(resets(out / "resets"))
+    results.extend(reset_phase_witness(out / "reset-phase-witness"))
     results.append(wrap(out / "wrap-default", 24, 260))
     results.append(wrap(out / "identity-exhaustion", 1, 512))
     results.append(wrap(out / "atomic-identity-exhaustion", 1, 504, 4096))
