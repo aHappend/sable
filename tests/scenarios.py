@@ -95,6 +95,8 @@ def fault_packet(wire, words, decoded, cycle, attempts, counts, rng, decisions, 
     # At most two unavailable events per DATA identity across DATA + ACK.
     identity = decoded["identity"]
     action = "deliver"
+    delay = None
+    damage_byte = None
     unavailable = faults and identity < 16
     if unavailable and not decoded["kind"] and attempt == 0 and identity % 5 == 0:
         counts[kind + "_drop"] += 1
@@ -114,6 +116,7 @@ def fault_packet(wire, words, decoded, cycle, attempts, counts, rng, decisions, 
             byte = (len(words) - 1) * 8
             label = "crc"
         wire.put(corrupted(words, byte), cycle + rng.randrange(1, 65))
+        damage_byte = byte
         counts[kind + "_corrupt_" + label] += 1
         action = "corrupt_" + label
     else:
@@ -126,13 +129,14 @@ def fault_packet(wire, words, decoded, cycle, attempts, counts, rng, decisions, 
             counts[kind + "_duplicate"] += 1
             counts[kind + "_reorder_scheduled"] += int(delay > 1)
     decisions.append(dict(cycle=cycle, kind=kind, stream=decoded["stream"],
-                          identity=identity, attempt=attempt, action=action))
+                          identity=identity, attempt=attempt, action=action,
+                          delay_cycles=delay, damaged_byte=damage_byte))
 
 
 def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
     rng = random.Random(seed)
     messages = traffic(seed, smoke)
-    sim = Sim(out, mode=mode, mutant=mutant)
+    sim = Sim(out, mode=mode, mutant=mutant, seed=seed)
     wires = [Wire(), Wire()]
     counts = collections.Counter()
     attempts = [collections.Counter(), collections.Counter()]
@@ -183,6 +187,9 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                 counts["DATA_corrupt_" + label] += 1
                 due += 32
         wires[0].put(words, due)
+        decisions.append(dict(kind="DATA", stream=d["stream"], identity=identity,
+                              action="model_TX_send_or_repair", scheduled_cycle=due,
+                              queued_cycle=sim.cycle))
         counts["DATA_delay"] += 1
         if identity % 4 == 0 and not smoke:
             wires[0].put(words, due + rng.randrange(1, 65))
@@ -237,7 +244,7 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                 app = chosen[1] if chosen is not None else None
                 incoming = wires[node].offer(cycle)
                 mr = int(cycle >= 512 and cycle % 2 == 0)
-                sr = int(cycle % 2 == 0 and cycle % 97 > 10)
+                sr = int(cycle % 2 == 0)
                 lr = int(cycle % 2 == 0)
                 drives.append(vector(app, incoming, mr, sr, lr))
                 offered.append(chosen)
@@ -379,12 +386,32 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
             delivered = mode == 0 or all(oracles[n].done() for n in range(nodes))
             if settled and delivered:
                 # Drain duplicate traffic and enforce no late duplicate messages/status.
-                for _ in range(200):
-                    obs, _ = sim.step(vector(), vector())
+                quiet = 0
+                for _ in range(4000):
+                    inputs = [w.offer(sim.cycle) for w in wires]
+                    obs, late = sim.step(*(vector(incoming=word) for word in inputs))
+                    for n in range(2):
+                        if inputs[n] is not None and obs[n]["rr"]:
+                            wires[n].accept()
                     for n in range(nodes):
                         if mode != 0:
                             oracles[n].observe(obs[n], 1)
                         assert not obs[n]["sv"], ("late duplicate status", obs[n])
+                    for n, words, d in late:
+                        if d["kind"] == 0:
+                            data, offset = identities[n][d["stream"], d["identity"]]
+                            assert d["payload"] == data[offset:offset + 256]
+                        elif mode == 1:
+                            key = d["stream"], d["identity"]
+                            assert key in rx_expected
+                            rx_acknowledged.add(key)
+                        if mode == 2:
+                            wires[1 - n].put(words, sim.cycle + 1)
+                    quiet = quiet + 1 if not late and all(w.empty() for w in wires) else 0
+                    if quiet >= 200:
+                        break
+                else:
+                    raise AssertionError("DUPLICATE_DRAIN_DEADLINE")
                 break
         else:
             raise AssertionError(("LIVENESS_DEADLINE", mode, seed, sim.cycle,
@@ -403,6 +430,10 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
             assert all(counts[k] > 0 for k in required), ("UNTRIGGERED_FAULT_COVERAGE", dict(counts), required)
             if mode == 2:
                 assert observed_reorder["DATA"] > 0 and observed_reorder["ACK"] > 0
+            elif mode == 1:
+                assert observed_reorder["DATA"] > 0
+            else:
+                assert observed_reorder["ACK"] > 0
         result = dict(seed=seed, mode=mode, config=sim.config, cycles=sim.cycle,
                       counts=dict(counts), observed_reorder=dict(observed_reorder),
                       compared_bytes=[o.compared for o in oracles[:nodes]],

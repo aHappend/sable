@@ -39,10 +39,10 @@ def vector(app=None, incoming=None, mr=1, sr=1, lr=1):
 
 
 class Sim:
-    def __init__(self, out, mode=2, timeout=4096, retries=4, generation=24, mutant=None):
+    def __init__(self, out, mode=2, timeout=4096, retries=4, generation=24, mutant=None, seed=None):
         self.out = pathlib.Path(out)
         self.out.mkdir(parents=True)
-        self.config = dict(mode=mode, timeout=timeout, retries=retries, generation=generation)
+        self.config = dict(mode=mode, timeout=timeout, retries=retries, generation=generation, seed=seed)
         self.argv = ["vvp", str(self.out / "sim.vvp")]
         command(self.out, "compile", ["iverilog", "-g2012", "-Wall", "-s", "bridge",
                 "-Pbridge.MODE=" + str(mode), "-Pbridge.TIMEOUT_CYCLES=" + str(timeout),
