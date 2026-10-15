@@ -31,7 +31,7 @@
 | **Architecture & Protocol Docs (`design/*.md`)** | **2 files** ([`design/ARCHITECTURE.md`](design/ARCHITECTURE.md), [`design/SPEC.md`](design/SPEC.md)) |
 | **Verification & Reference Suite (`tests/*`)** | **8 files** |
 | **Product Whitepaper (`REPORT.pdf`)** | Pending independent verification sign-off |
-| **Last Synchronized** | `2026-10-15 18:26:11 UTC+8` |
+| **Last Synchronized** | `2026-10-15 18:27:14 UTC+8` |
 
 ## System Architecture & Protocol Specification
 
