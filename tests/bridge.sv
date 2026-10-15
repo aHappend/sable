@@ -85,6 +85,7 @@ module bridge;
             $fflush();
             #1 clk=1;
             #1 clk=0;
+            #1;
             cycle=cycle+1;
         end
     end

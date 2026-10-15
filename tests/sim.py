@@ -4,6 +4,7 @@ import json
 import pathlib
 import select
 import subprocess
+import sys
 import time
 
 from model import decode
@@ -63,7 +64,11 @@ class Sim:
         self.mutant = mutant
         self.mutated = False
         self.comparisons = collections.Counter()
-        self.reset()
+        try:
+            self.reset()
+        except Exception:
+            self.close()
+            raise
 
     def step(self, a=None, b=None, rst=0):
         a = a or vector()
@@ -148,4 +153,5 @@ class Sim:
                       stdout="simulation.stdout", stderr="simulation.stderr", vectors="vectors.txt",
                       comparisons=dict(self.comparisons))
         (self.out / "simulation.receipt.json").write_text(json.dumps(record, indent=2))
-        assert code == 0, ("vvp exit", code)
+        if sys.exc_info()[0] is None:
+            assert code == 0, ("vvp exit", code)
