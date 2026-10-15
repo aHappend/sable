@@ -88,8 +88,10 @@ module sable_endpoint #(
     wire select_ack=owner_valid ? owner_ack :
         (ack_v && (!data_v || prefer_ack));
     wire selected_valid=select_ack ? ack_v : data_v;
-    assign data_r=!rst && !output_v && !select_ack;
-    assign ack_r=!rst && !output_v && select_ack;
+    // Retire the source beat only when the public link consumes its shadow.
+    // In particular, TX timeout timing must start at the public CRC handshake.
+    assign data_r=!rst && output_v && !owner_ack && link_tx_ready;
+    assign ack_r=!rst && output_v && owner_ack && link_tx_ready;
     assign link_tx_valid=!rst && output_v;
     assign link_tx_data=rst ? 64'b0 : output_d;
     assign link_tx_keep=rst ? 8'b0 : output_k;
