@@ -391,7 +391,7 @@ def receive_fairness(out):
         b.sim.close()
 
 
-def wrap(out, generation, count):
+def wrap(out, generation, count, exhausted_message_length=1):
     b = Bench(out, mode=0, generation=generation)
     old = None
     try:
@@ -411,14 +411,15 @@ def wrap(out, generation, count):
             b.until(lambda: len(b.status) == identity + 1)
             assert b.status[-1][2] == 0
         if generation == 1:
-            offered = beats(b"no reuse", True, 0)[0]
+            offered = beats(bytes(exhausted_message_length), True, 0)[0]
             assert not b.tick(app=offered)["ir"]
             assert b.tick(app=offered)["exhaust"] == 1
             assert not b.tick(app=offered)["ir"]
-            assert len(b.frames) == 512
+            assert len(b.frames) == count
         return b.result("identity_lifetime", generation_bits=generation,
                         allocated_packets=count, sequence_wrap=True, old_ACK_rejected=True,
-                        full_identity_exhaustion=generation == 1)
+                        full_identity_exhaustion=generation == 1,
+                        rejected_message_bytes=exhausted_message_length if generation == 1 else None)
     finally:
         b.sim.close()
 
@@ -457,9 +458,13 @@ def resets(out):
                             b.tick(app=beat, lr=0, sr=0)
                 if mode != 0:
                     raw = frame(0, 0, old_session, 0, data)
-                    count = len(raw) if index == len(offsets) - 1 else min(len(raw), index + 1)
+                    count = len(raw) if index >= len(offsets) - 2 else min(len(raw), index + 1)
                     b.wire(raw[:count], mr=0, lr=0)
-                b.idle(offset, mr=0, sr=0, lr=int(index > 2))
+                b.idle(offset, mr=0, sr=0, lr=int(index == 4))
+                if index == 4 and mode != 1:
+                    b.wire(frame(1, 0, old_session, 0), mr=0, sr=0)
+                    b.idle(6, mr=0, sr=0)
+                    assert b.last["sv"], ("completion reset precondition not reached", mode)
                 b.sim.session += 1
                 b.sim.reset()
                 b.frames.clear()
@@ -585,6 +590,7 @@ def directed(out, max_cycles):
     results.extend(resets(out / "resets"))
     results.append(wrap(out / "wrap-default", 24, 260))
     results.append(wrap(out / "identity-exhaustion", 1, 512))
+    results.append(wrap(out / "atomic-identity-exhaustion", 1, 504, 4096))
     results.append(rx_wrap(out / "rx-wrap"))
     results.append(parameters(out / "parameters"))
     return results

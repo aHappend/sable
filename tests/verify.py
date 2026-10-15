@@ -52,6 +52,7 @@ def main():
                          "rx-wrap": directed.rx_wrap, "parameters": directed.parameters,
                          "wrap": lambda p: directed.wrap(p, 24, 260),
                          "exhaust": lambda p: directed.wrap(p, 1, 512),
+                         "atomic-exhaust": lambda p: directed.wrap(p, 1, 504, 4096),
                          "fairness": directed.receive_fairness}
                 results.append(cases[args.case](out / "run"))
             else:
@@ -63,7 +64,8 @@ def main():
                         "rx-resources/reverse", "rx-resources/fifo", "timers/coincident",
                         "timers/in_retransmit", "timers/public_crc_stall", "timers/exhaust",
                         "ambiguity", "resets/mode0", "resets/mode1", "resets/mode2",
-                        "wrap-default", "identity-exhaustion", "rx-wrap", "parameters"]
+                        "wrap-default", "identity-exhaustion", "atomic-identity-exhaustion",
+                        "rx-wrap", "parameters"]
             from concurrent.futures import ProcessPoolExecutor
             with ProcessPoolExecutor(max_workers=3) as pool:
                 jobs = [pool.submit(seeded_runs, out, seed, args.max_cycles) for seed in args.seeds]
