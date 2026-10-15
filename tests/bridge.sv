@@ -75,7 +75,7 @@ module bridge;
         fd=$fopen(input_path,"r");
         if (!fd) $fatal(1,"INPUT_OPEN");
         forever begin
-            n=$fscanf(fd,"%h %h %h %h\n",rst,session_id,drive[0],drive[1]);
+            n=$fscanf(fd,"%h %h %h %h",rst,session_id,drive[0],drive[1]);
             if (n!=4) begin
                 if ((n==-1 || n==0) && $feof(fd)) $finish;
                 $fatal(1,"MALFORMED_VECTOR count=%0d",n);

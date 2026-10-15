@@ -157,7 +157,8 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
         for delta in range(4):
             s = (round_robin[node] + delta) % 4
             idx = send_index[node][s]
-            if idx < len(messages[s]) and (s not in obligations[node] or obligations[node][s]["done"]):
+            if idx < len(messages[s]) and (send_offset[node][s] > 0 or
+                                          s not in obligations[node] or obligations[node][s]["done"]):
                 data = messages[s][idx]
                 pos = send_offset[node][s]
                 if pos == 0:
@@ -207,12 +208,16 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                     # Observe actual overtaking, not only randomized scheduling labels.
                     if wires[node].pos == 0:
                         from model import decode
-                        transaction = decode(wires[node].active)
-                        k = node, transaction["kind"], transaction["stream"]
-                        previous = received_order.get(k, -1)
-                        if transaction["identity"] < previous:
-                            observed_reorder["ACK" if transaction["kind"] else "DATA"] += 1
-                        received_order[k] = transaction["identity"]
+                        try:
+                            transaction = decode(wires[node].active)
+                        except AssertionError:
+                            transaction = None
+                        if transaction is not None:
+                            k = node, transaction["kind"], transaction["stream"]
+                            previous = received_order.get(k, -1)
+                            if transaction["identity"] < previous:
+                                observed_reorder["ACK" if transaction["kind"] else "DATA"] += 1
+                            received_order[k] = transaction["identity"]
                     wires[node].accept()
                 if offered[node] and o["ir"]:
                     s, beat = offered[node]

@@ -2,6 +2,7 @@
 import collections
 import json
 import pathlib
+import select
 import subprocess
 import time
 
@@ -71,6 +72,9 @@ class Sim:
         self.inputs.write(line)
         self.p.stdin.write(line)
         self.p.stdin.flush()
+        if not select.select([self.p.stdout], [], [], 10)[0]:
+            self.p.terminate()
+            raise RuntimeError("SIMULATION_RESPONSE_TIMEOUT")
         line = self.p.stdout.readline()
         self.raw.write(line)
         assert line.startswith("OBS "), ("simulation stopped", line, self.cycle)
