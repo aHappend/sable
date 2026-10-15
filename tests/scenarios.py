@@ -115,7 +115,8 @@ def fault_packet(wire, words, decoded, cycle, attempts, counts, rng, decisions, 
         else:
             byte = (len(words) - 1) * 8
             label = "crc"
-        wire.put(corrupted(words, byte), cycle + rng.randrange(1, 65))
+        delay = rng.randrange(1, 65)
+        wire.put(corrupted(words, byte), cycle + delay)
         damage_byte = byte
         counts[kind + "_corrupt_" + label] += 1
         action = "corrupt_" + label
