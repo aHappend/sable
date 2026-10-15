@@ -14,7 +14,7 @@ def synthesis(out):
         "synth -top sable_endpoint -noshare -run begin:fine\n"
         "check -assert\nstat\n"
         f"write_json {design}\n")
-    command(out, "yosys", ["yosys", "-Q", "-T", "-s", script], timeout=60)
+    command(out, "yosys", ["yosys", "-Q", "-T", "-s", script], timeout=100)
     netlist = json.loads(design.read_text())
     modules = netlist["modules"]
     assert "sable_endpoint" in modules

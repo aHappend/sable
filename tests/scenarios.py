@@ -70,10 +70,13 @@ class MessageOracle:
 
 def traffic(seed, smoke=False):
     rng = random.Random(seed)
-    lengths = (9, 4096, 257, 1) if smoke else LENGTHS
-    return {s: [payload(s, length, n, rng) for n, length in
-                enumerate(lengths if s % 2 == 0 else tuple(reversed(lengths)))]
-            for s in range(4)}
+    result = {}
+    for s in range(4):
+        lengths = (1, 4096, 9, 257) if smoke else tuple(dict.fromkeys((1, 4096, *LENGTHS[s::4])))
+        result[s] = [payload(s, length, n, rng) for n, length in enumerate(lengths)]
+    assert smoke or set(LENGTHS) <= {len(data) for items in result.values() for data in items}
+    assert all({1, 4096} <= {len(data) for data in items} for items in result.values())
+    return result
 
 
 def corrupted(words, byte, bit=0):
@@ -151,6 +154,33 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
     received_order = {}
     nodes = 2 if mode == 2 else 1
     deadlines = {}
+    incoming_frames = [[], []]
+    tx_seen = [collections.defaultdict(set), collections.defaultdict(set)]
+    highest_occupancy = [collections.Counter(), collections.Counter()]
+
+    def rx_enqueue(words, identity, due=0):
+        from model import decode
+        d = decode(words)
+        if not smoke and identity < 16:
+            action = identity % 5
+            if action == 0:
+                counts["DATA_drop"] += 1
+                decisions.append(dict(kind="DATA", stream=d["stream"], identity=identity,
+                                      action="drop_initial_model_TX_attempt", cycle=sim.cycle))
+                due += 32
+            elif action in (2, 3):
+                choice = (identity // 5 + d["stream"]) % 3
+                byte, label = ((4, "header") if choice == 0 else
+                               (24, "payload") if choice == 1 else
+                               ((len(words) - 1) * 8, "crc"))
+                wires[0].put(corrupted(words, byte), due)
+                counts["DATA_corrupt_" + label] += 1
+                due += 32
+        wires[0].put(words, due)
+        counts["DATA_delay"] += 1
+        if identity % 4 == 0 and not smoke:
+            wires[0].put(words, due + rng.randrange(1, 65))
+            counts["DATA_duplicate"] += 1
 
     def choose(node):
         if current[node] is not None:
@@ -182,10 +212,10 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                 data = messages[s][0]
                 ids = list(range((len(data) + 255) // 256))
                 for identity in reversed(ids[:8]):
-                    wires[0].put(frame(0, s, sim.session, identity, data, identity * 256))
+                    rx_enqueue(frame(0, s, sim.session, identity, data, identity * 256), identity)
                 # Later-window packets follow only after the older window has had time to copy.
                 for identity in ids[8:]:
-                    wires[0].put(frame(0, s, sim.session, identity, data, identity * 256), 2000)
+                    rx_enqueue(frame(0, s, sim.session, identity, data, identity * 256), identity, 4000)
             rx_enqueued = collections.Counter({s: 1 for s in range(4)})
             rx_base = collections.Counter({s: (len(messages[s][0]) + 255) // 256 for s in range(4)})
 
@@ -195,7 +225,8 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
             drives = []
             offered = []
             for node in range(2):
-                chosen = choose(node) if node < nodes and mode != 1 else None
+                allow_source = current[node] is not None or cycle % 4 != seed % 4
+                chosen = choose(node) if node < nodes and mode != 1 and allow_source else None
                 # Gaps occur between accepted beats, never while a beat is stalled.
                 app = chosen[1] if chosen is not None else None
                 incoming = wires[node].offer(cycle)
@@ -208,6 +239,21 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
             for node in range(2):
                 o, drive = observations[node], drives[node]
                 if drive[10] and o["rr"]:
+                    word = tuple(drive[11:])
+                    if word[2]:
+                        assert not incoming_frames[node], ("model link nested first", word)
+                    incoming_frames[node].append(word)
+                    if word[-1]:
+                        from model import decode
+                        try:
+                            incoming_decoded = decode(incoming_frames[node])
+                        except AssertionError:
+                            counts["actual_invalid_input_frames"] += 1
+                        else:
+                            if incoming_decoded["kind"] == 1:
+                                acked[node][incoming_decoded["stream"]].add(incoming_decoded["identity"])
+                            counts["actual_valid_input_frames"] += 1
+                        incoming_frames[node] = []
                     # Observe actual overtaking, not only randomized scheduling labels.
                     if wires[node].pos == 0:
                         from model import decode
@@ -246,11 +292,10 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                                     rng.shuffle(order)
                                     for part in order:
                                         words = frame(0, s, sim.session, base + part, data, part * 256)
-                                        wires[0].put(words, cycle + 3)
-                                        if part == order[0]:
-                                            wires[0].put(words, cycle + 4)
+                                        rx_enqueue(words, base + part, cycle + rng.randrange(1, 65))
                                     for part in range(8, packets):
-                                        wires[0].put(frame(0, s, sim.session, base + part, data, part * 256), cycle + 1800)
+                                        rx_enqueue(frame(0, s, sim.session, base + part, data, part * 256),
+                                                   base + part, cycle + 4000)
                                     rx_enqueued[s] += 1
                                     rx_base[s] += packets
                 if o["sv"] and drive[8]:
@@ -260,6 +305,7 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                     expected = 0
                     assert o["sc"] == expected, ("STATUS_MISMATCH", node, s, "actual", o["sc"], "expected", expected)
                     assert not obligation["done"], ("DUPLICATE_STATUS", node, s)
+                    assert cycle <= deadlines[node, s, send_index[node][s]], ("STATUS_LIVENESS_DEADLINE", node, s)
                     if mode == 0:
                         count = (len(obligation["data"]) + 255) // 256
                         expected_ids = set(range(obligation["base"], obligation["base"] + count))
@@ -280,6 +326,14 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                     assert (d["length"], d["offset"], d["payload"]) == (len(data), offset, data[offset:offset + 256]), ("DATA_FRAGMENT_MISMATCH", d)
                     assert obligations[node][d["stream"]]["accepted"], ("send before complete input", d)
                     counts["fragment_compares"] += 1
+                    s = d["stream"]
+                    live = tx_seen[node][s] - acked[node][s]
+                    if key[1] not in tx_seen[node][s]:
+                        assert not live or key[1] <= min(live) + 7, ("WINDOW_OVERFLOW", node, s, key[1], live)
+                    tx_seen[node][s].add(key[1])
+                    highest_occupancy[node][s] = max(highest_occupancy[node][s],
+                                                    len(tx_seen[node][s] - acked[node][s]))
+                    assert highest_occupancy[node][s] <= 8, ("WINDOW_OCCUPANCY", node, s)
                     if mode == 0:
                         # Only valid model ACKs are counted as acknowledgement events below.
                         ack = frame(1, d["stream"], sim.session, d["identity"])
@@ -291,28 +345,6 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                     counts["ack_compares"] += 1
                     if mode == 2:
                         fault_packet(wires[1 - node], words, d, cycle, attempts[node], counts, rng, decisions, not smoke)
-            if mode == 0:
-                # An ACK is effective only when its valid CRC tail actually entered RTL.
-                for node, (o, drive) in enumerate(zip(observations, drives)):
-                    if drive[10] and o["rr"] and drive[-1]:
-                        from model import decode
-                        # Reconstruct accepted ACKs from the driven public beats.
-                        outstanding[node].add(tuple(drive[11:]))
-                        # Use CRC validation of the accepted full frame, not scheduled ACKs.
-                # Link monitor for model input, independent of serializer state.
-                if drives[0][10] and observations[0]["rr"]:
-                    incoming = tuple(drives[0][11:])
-                    if incoming[2]:
-                        input_ack = []
-                    input_ack.append(incoming)
-                    if incoming[-1]:
-                        from model import decode
-                        try:
-                            ad = decode(input_ack)
-                        except AssertionError:
-                            counts["invalid_ACK_delivered"] += 1
-                        else:
-                            acked[0][ad["stream"]].add(ad["identity"])
             settled = all(statuses[n][s] == len(messages[s]) for n in range(nodes) for s in range(4)) if mode != 1 else oracles[0].done()
             delivered = mode == 0 or all(oracles[n].done() for n in range(nodes))
             if settled and delivered:
@@ -331,11 +363,20 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
             assert counts["fragment_compares"] and counts["status_compares"]
         if mode != 0:
             assert all(oracles[n].compared for n in range(nodes))
+        if not smoke:
+            required = (["DATA_drop", "DATA_duplicate", "DATA_delay", "DATA_corrupt_header",
+                         "DATA_corrupt_payload", "DATA_corrupt_crc"] if mode != 0 else [])
+            if mode != 1:
+                required += ["ACK_drop", "ACK_duplicate", "ACK_delay", "ACK_corrupt_header", "ACK_corrupt_crc"]
+            assert all(counts[k] > 0 for k in required), ("UNTRIGGERED_FAULT_COVERAGE", dict(counts), required)
+            if mode == 2:
+                assert observed_reorder["DATA"] > 0 and observed_reorder["ACK"] > 0
         result = dict(seed=seed, mode=mode, config=sim.config, cycles=sim.cycle,
                       counts=dict(counts), observed_reorder=dict(observed_reorder),
                       compared_bytes=[o.compared for o in oracles[:nodes]],
                       messages=[dict(o.completed) for o in oracles[:nodes]],
                       statuses=[dict(s) for s in statuses[:nodes]], outcome="passed")
+        result["highest_outstanding_per_stream"] = [dict(x) for x in highest_occupancy[:nodes]]
         (sim.out / "coverage.json").write_text(json.dumps(result, indent=2))
         return result
     finally:

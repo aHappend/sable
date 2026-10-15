@@ -24,6 +24,9 @@ class Bench:
     def tick(self, app=None, incoming=None, **ready):
         drive = vector(app, incoming, ready.get("mr", self.mr),
                        ready.get("sr", self.sr), ready.get("lr", self.lr))
+        if app is None and "select_stream" in ready:
+            drive[5] = ready["select_stream"]
+            drive[6] = 1
         obs, emitted = self.sim.step(drive)
         o = obs[0]
         self.last = o
@@ -311,8 +314,7 @@ def mailbox(out):
         b.idle(30)
         assert not b.status and b.last["sv"]
         for s in range(4):
-            offered = beats(b"next", True, s)[0]
-            assert b.tick(app=offered)["ir"] == 0
+            assert b.tick(select_stream=s)["ir"] == 0
         b.sr = 1
         b.until(lambda: len(b.status) == 4)
         assert {s for _, s, c in b.status if c == 0} == set(range(4))

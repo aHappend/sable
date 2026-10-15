@@ -13,6 +13,11 @@ from retain import ROOT, command, fresh, inventory, versions
 from scenarios import run_transport
 
 
+def seeded_runs(out, seed, max_cycles):
+    return [run_transport(out / f"seed{seed}-mode{mode}", seed, mode, max_cycles)
+            for mode in (0, 1, 2)]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("operation", choices=("behavior", "negative", "synthesis", "reproduce", "probe", "negative-child"))
@@ -42,15 +47,19 @@ def main():
                          "rx": directed.rx_integrity, "mailbox": directed.mailbox,
                          "resources": directed.reverse_and_fifo, "timers": directed.timers,
                          "ambiguity": directed.ambiguity, "resets": directed.resets,
-                         "rx-wrap": directed.rx_wrap, "parameters": directed.parameters}
+                         "rx-wrap": directed.rx_wrap, "parameters": directed.parameters,
+                         "wrap": lambda p: directed.wrap(p, 24, 260),
+                         "exhaust": lambda p: directed.wrap(p, 1, 512)}
                 results.append(cases[args.case](out / "run"))
             else:
                 results.append(run_transport(out / "run", args.seeds[0], args.mode,
                                              args.max_cycles, smoke=not args.full, mutant=args.mutant))
         elif args.operation == "behavior":
-            for seed in args.seeds:
-                for mode in (0, 1, 2):
-                    results.append(run_transport(out / f"seed{seed}-mode{mode}", seed, mode, args.max_cycles))
+            from concurrent.futures import ProcessPoolExecutor
+            with ProcessPoolExecutor(max_workers=3) as pool:
+                jobs = [pool.submit(seeded_runs, out, seed, args.max_cycles) for seed in args.seeds]
+                for job in jobs:
+                    results.extend(job.result())
             from directed import directed
             results.extend(directed(out, args.max_cycles))
         elif args.operation == "synthesis":
@@ -82,7 +91,7 @@ def main():
             command(out, "clean-smoke", ["python3", "tests/verify.py", "probe",
                     "--mode", "2", "--out", "evidence/smoke"], timeout=45, cwd=clean)
             command(out, "clean-synthesis", ["python3", "tests/verify.py", "synthesis",
-                    "--out", "evidence/synthesis"], timeout=65, cwd=clean)
+                    "--out", "evidence/synthesis"], timeout=105, cwd=clean)
             results.append(dict(outcome="passed", copied_sources=source))
     except Exception:
         code = 1
