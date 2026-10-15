@@ -22,6 +22,7 @@ def main():
     parser.add_argument("--mode", type=int, default=2)
     parser.add_argument("--mutant", choices=("data", "status"))
     parser.add_argument("--repair-of")
+    parser.add_argument("--full", action="store_true")
     args = parser.parse_args()
     out = fresh(args.out.resolve(), args.operation)
     source = inventory()
@@ -35,7 +36,7 @@ def main():
     try:
         if args.operation in ("probe", "negative-child"):
             results.append(run_transport(out / "run", args.seeds[0], args.mode,
-                                         args.max_cycles, smoke=True, mutant=args.mutant))
+                                         args.max_cycles, smoke=not args.full, mutant=args.mutant))
         elif args.operation == "behavior":
             for seed in args.seeds:
                 for mode in (0, 1, 2):

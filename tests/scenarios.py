@@ -157,6 +157,8 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
         for delta in range(4):
             s = (round_robin[node] + delta) % 4
             idx = send_index[node][s]
+            if s in obligations[node] and obligations[node][s]["accepted"] and not obligations[node][s]["done"]:
+                continue
             if idx < len(messages[s]) and (send_offset[node][s] > 0 or
                                           s not in obligations[node] or obligations[node][s]["done"]):
                 data = messages[s][idx]
