@@ -27,11 +27,11 @@
 | --- | --- |
 | **Autonomous Engine** | **Vulcan 0.8** (`gpt-6.1-sol`, autonomous `no_operator_assumption` workflow) |
 | **Current Engineering Status** | Phase: `designer` (Step 2) — Autonomous RTL & Verification in Progress |
-| **Synthesizable RTL (`rtl/*.sv`)** | **3 modules / 961 lines** |
+| **Synthesizable RTL (`rtl/*.sv`)** | **3 modules / 979 lines** |
 | **Architecture & Protocol Docs (`design/*.md`)** | **2 files** ([`design/ARCHITECTURE.md`](design/ARCHITECTURE.md), [`design/SPEC.md`](design/SPEC.md)) |
 | **Verification & Reference Suite (`tests/*`)** | **0 files** |
 | **Product Whitepaper (`REPORT.pdf`)** | Pending independent verification sign-off |
-| **Last Synchronized** | `2026-10-15 18:16:39 UTC+8` |
+| **Last Synchronized** | `2026-10-15 18:17:43 UTC+8` |
 
 ## System Architecture & Protocol Specification
 
@@ -49,8 +49,8 @@
 | Module File | Size | Role |
 | --- | --- | --- |
 | [`rtl/sable_endpoint.sv`](rtl/sable_endpoint.sv) | `147` lines (`6026` B) | Synthesizable SystemVerilog RTL module |
-| [`rtl/sable_rx.sv`](rtl/sable_rx.sv) | `401` lines (`16367` B) | Synthesizable SystemVerilog RTL module |
-| [`rtl/sable_tx.sv`](rtl/sable_tx.sv) | `413` lines (`16768` B) | Synthesizable SystemVerilog RTL module |
+| [`rtl/sable_rx.sv`](rtl/sable_rx.sv) | `405` lines (`16565` B) | Synthesizable SystemVerilog RTL module |
+| [`rtl/sable_tx.sv`](rtl/sable_tx.sv) | `427` lines (`17420` B) | Synthesizable SystemVerilog RTL module |
 
 ## Repository Layout
 

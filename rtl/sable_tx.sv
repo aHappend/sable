@@ -143,8 +143,9 @@ module sable_tx #(
     integer i, j, f, q, idx, candidate_stream, candidate_packet, candidate_slot;
     integer status_choice, remaining;
     reg candidate_retry, found, found_packet;
-    reg [63:0] build_data;
-    reg [7:0] build_keep;
+    reg [63:0] header_data, successor_data;
+    reg [7:0] successor_keep;
+    reg successor_last;
 
     always @* begin
         candidate_stream=-1;
@@ -192,33 +193,40 @@ module sable_tx #(
     end
 
     always @* begin
-        build_data=0;
-        build_keep=8'hff;
+        header_data=0;
+        header_data[31:0]=32'h00014253;
+        header_data[39:32]={6'b0,frame_stream};
+        header_data[40]=(frame_offset==0);
+        header_data[41]=(frame_offset+frame_payload==frame_len);
+        header_data[63:48]={7'b0,frame_payload};
+        successor_data=0;
+        successor_keep=8'hff;
+        successor_last=0;
         remaining=0;
         case (phase)
-            0: begin
-                build_data[31:0]=32'h00014253;
-                build_data[39:32]={6'b0,frame_stream};
-                build_data[40]=(frame_offset==0);
-                build_data[41]=(frame_offset+frame_payload==frame_len);
-                build_data[63:48]={7'b0,frame_payload};
+            0: successor_data={frame_id,session};
+            1: begin
+                successor_data[15:0]={3'b0,frame_len};
+                successor_data[31:16]={3'b0,frame_offset};
             end
-            1: build_data={frame_id,session};
             2: begin
-                build_data[15:0]={3'b0,frame_len};
-                build_data[31:16]={3'b0,frame_offset};
+                successor_keep=byte_keep(frame_payload);
+                successor_data=clean_word(message_mem[frame_stream*512+
+                    (frame_offset>>3)],successor_keep);
             end
             3: begin
-                remaining=frame_payload-frame_word*8;
-                build_keep=byte_keep(remaining);
-                build_data=clean_word(message_mem[frame_stream*512+
-                    (frame_offset>>3)+frame_word],build_keep);
+                if ((frame_word+1)*8>=frame_payload) begin
+                    successor_keep=8'h0f;
+                    successor_data={32'b0,~crc_word(frame_crc,data_d,data_k)};
+                    successor_last=1;
+                end else begin
+                    remaining=frame_payload-(frame_word+1)*8;
+                    successor_keep=byte_keep(remaining);
+                    successor_data=clean_word(message_mem[frame_stream*512+
+                        (frame_offset>>3)+frame_word+1],successor_keep);
+                end
             end
-            4: begin
-                build_keep=8'h0f;
-                build_data={32'b0,~frame_crc};
-            end
-            default: begin build_data=0; build_keep=0; end
+            default: begin successor_data=0; successor_keep=0; end
         endcase
     end
 
@@ -381,13 +389,18 @@ module sable_tx #(
             end
             if (sending && !data_v) begin
                 data_v<=1;
-                data_d<=build_data;
-                data_k<=build_keep;
-                data_f<=(phase==0);
-                data_l<=(phase==4);
+                data_d<=header_data;
+                data_k<=8'hff;
+                data_f<=1;
+                data_l<=0;
             end else if (data_v && m_data_ready) begin
-                data_v<=0; data_d<=0; data_k<=0; data_f<=0; data_l<=0;
-                if (phase!=4) frame_crc<=crc_word(frame_crc,data_d,data_k);
+                if (phase!=4) begin
+                    data_d<=successor_data;
+                    data_k<=successor_keep;
+                    data_f<=0;
+                    data_l<=successor_last;
+                    frame_crc<=crc_word(frame_crc,data_d,data_k);
+                end
                 case (phase)
                     0: phase<=1;
                     1: phase<=2;
@@ -397,6 +410,7 @@ module sable_tx #(
                         else frame_word<=frame_word+1'b1;
                     end
                     4: begin
+                        data_v<=0; data_d<=0; data_k<=0; data_f<=0; data_l<=0;
                         sending<=0;
                         if (!terminal[frame_stream] &&
                             !acknowledged[frame_stream][frame_packet]) begin

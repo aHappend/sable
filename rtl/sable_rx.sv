@@ -193,15 +193,8 @@ module sable_rx #(
     wire ack_push=ack_request && (ack_count<32 || ack_pop);
     always @* begin
         ack_build=0;
-        case (ack_phase)
-            0: begin
-                ack_build[31:0]=32'h01014253;
-                ack_build[39:32]={6'b0,ack_stream};
-            end
-            1: ack_build={ack_identity,session};
-            2: ack_build=0;
-            3: ack_build={32'b0,~ack_crc};
-        endcase
+        ack_build[31:0]=32'h01014253;
+        ack_build[39:32]={6'b0,ack_stream};
     end
 
     assign s_data_ready=!rst && parse_phase<=5;
@@ -384,16 +377,27 @@ module sable_rx #(
             if (ack_sending && !ack_v) begin
                 ack_v<=1;
                 ack_d<=ack_build;
-                if (ack_phase==3) ack_k<=8'h0f;
-                else ack_k<=8'hff;
-                ack_f<=(ack_phase==0);
-                ack_l<=(ack_phase==3);
+                ack_k<=8'hff;
+                ack_f<=1;
+                ack_l<=0;
             end else if (ack_v && m_ack_ready) begin
-                ack_v<=0; ack_d<=0; ack_k<=0; ack_f<=0; ack_l<=0;
-                if (ack_phase==3) ack_sending<=0;
+                if (ack_phase==3) begin
+                    ack_sending<=0;
+                    ack_v<=0; ack_d<=0; ack_k<=0; ack_f<=0; ack_l<=0;
+                end
                 else begin
                     ack_crc<=crc_word(ack_crc,ack_d,ack_k);
                     ack_phase<=ack_phase+1'b1;
+                    ack_f<=0;
+                    ack_l<=(ack_phase==2);
+                    if (ack_phase==2) ack_k<=8'h0f;
+                    else ack_k<=8'hff;
+                    case (ack_phase)
+                        0: ack_d<={ack_identity,session};
+                        1: ack_d<=0;
+                        2: ack_d<={32'b0,~crc_word(ack_crc,ack_d,ack_k)};
+                        default: ack_d<=0;
+                    endcase
                 end
             end
         end

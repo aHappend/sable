@@ -27,11 +27,11 @@
 | --- | --- |
 | **自主研发引擎** | **Vulcan 0.8**（后端模型 `gpt-6.1-sol`，全自治 `no_operator_assumption` 闭环） |
 | **当前工程进度** | 当前阶段：`designer`（第 2 步）— 全自主架构、RTL 与独立验证推进中 |
-| **可综合 RTL 模块（`rtl/*.sv`）** | **3 个模块 / 共 961 行** |
+| **可综合 RTL 模块（`rtl/*.sv`）** | **3 个模块 / 共 979 行** |
 | **架构与协议文档（`design/*.md`）** | **2 份文档**（[`design/ARCHITECTURE.md`](design/ARCHITECTURE.md), [`design/SPEC.md`](design/SPEC.md)） |
 | **验证与参考模型套件（`tests/*`）** | **0 个文件** |
 | **产品技术白皮书（`REPORT.pdf`）** | 待独立验证签核后自动编译生成 |
-| **最近同步时间** | `2026-10-15 18:16:39 UTC+8` |
+| **最近同步时间** | `2026-10-15 18:17:43 UTC+8` |
 
 ## 系统架构与六大核心规格映射
 
@@ -49,8 +49,8 @@
 | 模块文件 | 代码规模 | 功能说明 |
 | --- | --- | --- |
 | [`rtl/sable_endpoint.sv`](rtl/sable_endpoint.sv) | `147` 行（`6026` B） | 可综合 SystemVerilog RTL 核心模块 |
-| [`rtl/sable_rx.sv`](rtl/sable_rx.sv) | `401` 行（`16367` B） | 可综合 SystemVerilog RTL 核心模块 |
-| [`rtl/sable_tx.sv`](rtl/sable_tx.sv) | `413` 行（`16768` B） | 可综合 SystemVerilog RTL 核心模块 |
+| [`rtl/sable_rx.sv`](rtl/sable_rx.sv) | `405` 行（`16565` B） | 可综合 SystemVerilog RTL 核心模块 |
+| [`rtl/sable_tx.sv`](rtl/sable_tx.sv) | `427` 行（`17420` B） | 可综合 SystemVerilog RTL 核心模块 |
 
 ## 仓库目录结构
 

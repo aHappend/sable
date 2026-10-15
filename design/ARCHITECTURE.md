@@ -78,15 +78,17 @@ if no space exists only the new ACK is dropped, never accepted packet data.
 
 ## Registered flow control and service bounds
 
-Each serial beat uses a load edge and a later handshake edge. Under a ready
-opportunity every two cycles, one beat takes at most three cycles after it is
-eligible (load plus at most two until handshake). DATA has at most 36 beats,
-so standalone serialization takes <=108 cycles plus scheduling. ACK has four
-beats. The endpoint adds a registered one-beat shadow stage, without a
+Each serial frame has an initial load edge and a later handshake edge.
+Successor beats are calculated from the already owned pre-edge frame context
+and loaded into the final register on the preceding beat's handshake; this is
+not forwarding a new input transaction. A stalled beat never advances.
+Under a ready opportunity every two cycles, standalone serialization takes
+at most two cycles per beat after its initial load. DATA has at most 36 beats
+and ACK has four. The endpoint adds a registered one-beat shadow stage, without a
 combinational data bypass. It does not retire the source beat until the public
 link handshake: a CRC stalled in this register must not start a TX timer.
-Including this stage, allow four cycles per beat under two-cycle ready service,
-or <=144 cycles for DATA and <=16 cycles for ACK, plus frame selection.
+Including this stage, allow three cycles per beat under two-cycle ready service,
+or <=108 cycles for DATA and <=12 cycles for ACK, plus initial frame selection.
 A stalled final register is never changed.
 
 RX commit of at most 32 words and ordered copy of at most 32 words are finite.
@@ -111,17 +113,19 @@ The maximum serial DATA frame and <=32-word staging commit are far below the
 service bound own scheduling. ACK FIFO holds 32 packets (one full aggregate
 window); even saturated, its serializer drains independently, and a retransmit
 regenerates a lost ACK. Retry timers exclude serialization and waiting for
-arbitration, and start at tail handshake. Conservatively allow 170 cycles for
-an ACK service opportunity including one competing maximum DATA frame and
-selection bubbles: an enqueued ACK has at most 32 preceding/active entries,
-so its service bound is 5610 cycles, plus bounded external delay. This can
-exceed one default timeout but is below two; a timeout is not evidence of loss.
+arbitration, and start at tail handshake. A backlogged ACK service opportunity
+includes at most one competing maximum DATA frame: 108+12=120 cycles. The next
+ACK header is prefetched during that DATA frame; the next DATA header is
+prefetched during the ACK frame, so there is no repeated frame-setup penalty
+in this bound. An enqueued ACK has at most 32 preceding/active entries, giving
+33*120=3960 cycles, plus <=8 initial setup cycles and <=64 link delay. This is
+below the default 4096-cycle timeout. A timeout still is not evidence of loss.
 Similarly, a maximum message has 512 application beats; four-stream round
 robin and three cycles per standalone application beat bound its output drain
 by 6144 service cycles plus the allowed initial 512-cycle stall. Timeout
 selection cannot itself prevent this independent drain. Two unavailable
-events leave two of the four retry opportunities for such transient queue and
-consumer delays. Short timeout parameters intentionally need not satisfy the
+events leave two of the four retry opportunities for such transient consumer
+delays. Short timeout parameters intentionally need not satisfy the
 default successful-delivery envelope. The 200000-cycle per-message acceptance
 deadline and the joint default loss/service cases remain measured obligations
 for Verifier, not inferred from compilation or these individual stage bounds.
