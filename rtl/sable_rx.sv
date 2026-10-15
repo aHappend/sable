@@ -240,7 +240,7 @@ module sable_rx #(
             for (i=0;i<32;i=i+1) begin slot_index[i]<=0; slot_bytes[i]<=0; end
         end else begin
             if (s_data_valid && s_data_ready) begin
-                if (s_data_first) begin
+                if (s_data_first && parse_phase==0) begin
                     h0<=s_data_data;
                     parse_crc<=crc_word(32'hffffffff,s_data_data,8'hff);
                     payload_word<=0;
@@ -251,6 +251,10 @@ module sable_rx #(
                     if (s_data_last) parse_phase<=0;
                     else if (s_data_data[63:48]>=1 && s_data_data[63:48]<=256)
                         parse_phase<=1;
+                    else parse_phase<=5;
+                end else if (s_data_first) begin
+                    parse_good<=0;
+                    if (s_data_last) parse_phase<=0;
                     else parse_phase<=5;
                 end else begin
                     case (parse_phase)

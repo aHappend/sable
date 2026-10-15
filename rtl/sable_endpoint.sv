@@ -117,7 +117,7 @@ module sable_endpoint #(
                     input_k<=link_rx_keep;
                     input_f<=link_rx_first;
                     input_l<=link_rx_last;
-                    if (link_rx_first) begin
+                    if (!input_locked) begin
                         input_ack<=(link_rx_data[31:24]==8'h01);
                         input_route<=(link_rx_data[31:24]==8'h01);
                     end else input_ack<=input_route;

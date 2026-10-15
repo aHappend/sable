@@ -91,8 +91,10 @@ Header keep is ff; only header beat zero has first. Payload keep is contiguous
 low ones. Only CRC has last; CRC keep is 0f, high data bits are zero. Reject
 bad constants, reserved bits, length relations, frame shape, session, generation
 range and CRC without changing delivery/window state or issuing positive ACK.
-Finite malformed frames drain. A first beat resynchronizes parsing after reset;
-continuation beats with no recognized first are discarded.
+Finite malformed frames drain. A first beat resynchronizes idle parsing after reset; continuation beats with
+no recognized first are discarded. An unexpected first inside an active
+frame invalidates that frame and drains to last rather than accepting a
+nested frame.
 
 CRC-32C/Castagnoli: polynomial 1edc6f41, reflected update 82f63b78, initial
 ffffffff, reflected input/output, xorout ffffffff. Process bytes in wire order,

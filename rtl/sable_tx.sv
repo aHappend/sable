@@ -272,7 +272,7 @@ module sable_tx #(
             end
 
             if (s_ack_valid) begin
-                if (s_ack_first) begin
+                if (s_ack_first && ack_phase==0) begin
                     ack_h0<=s_ack_data;
                     ack_crc<=crc_word(32'hffffffff,s_ack_data,8'hff);
                     ack_good<=!s_ack_last && s_ack_keep==8'hff &&
@@ -280,6 +280,10 @@ module sable_tx #(
                         s_ack_data[39:34]==0 && s_ack_data[63:40]==0;
                     if (s_ack_last) ack_phase<=0;
                     else ack_phase<=1;
+                end else if (s_ack_first) begin
+                    ack_good<=0;
+                    if (s_ack_last) ack_phase<=0;
+                    else ack_phase<=4;
                 end else if (ack_phase!=0) begin
                     if (ack_phase==1) begin
                         ack_h1<=s_ack_data;
