@@ -390,8 +390,7 @@ def resets(out):
                 if mode != 0:
                     raw = frame(0, 0, old_session, 0, data)
                     count = len(raw) if index == len(offsets) - 1 else min(len(raw), index + 1)
-                    for beat in raw[:count]:
-                        b.tick(incoming=beat, mr=0, lr=0)
+                    b.wire(raw[:count], mr=0, lr=0)
                 b.idle(offset, mr=0, sr=0, lr=int(index > 2))
                 b.sim.session += 1
                 b.sim.reset()

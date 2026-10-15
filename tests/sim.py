@@ -64,6 +64,9 @@ class Sim:
         self.mutant = mutant
         self.mutated = False
         self.comparisons = collections.Counter()
+        self.input_hold = {}
+        self.application_progress = {}
+        self.application_complete = {}
         try:
             self.reset()
         except Exception:
@@ -90,11 +93,38 @@ class Sim:
         if rst:
             assert not any(any(o.values()) for o in observations), ("reset", observations)
             self.stall.clear()
+            self.input_hold.clear()
+            self.application_progress.clear()
+            self.application_complete.clear()
             self.frames = [[], []]
             return observations, []
         emitted = []
         for node, (o, drive) in enumerate(zip(observations, (a, b))):
             self.comparisons["pin_cycles"] += 1
+            for channel, valid, ready, values in (
+                ("application", drive[0], o["ir"], tuple(drive[1:7])),
+                ("incoming", drive[10], o["rr"], tuple(drive[11:]))):
+                key = node, channel
+                if key in self.input_hold:
+                    assert valid and values == self.input_hold[key], ("STIMULUS_STALL_VIOLATION", key, values, self.input_hold[key])
+                if valid and not ready:
+                    self.input_hold[key] = values
+                else:
+                    self.input_hold.pop(key, None)
+            if drive[0] and o["ir"]:
+                _, data, keep, first, last, stream, length = drive[:7]
+                assert 1 <= length <= 4096, ("ILLEGAL_APPLICATION_LENGTH", length)
+                pos, previous_length = self.application_progress.get((node, stream), (0, length))
+                count = min(8, length - pos)
+                assert (previous_length, keep, first, last) == (
+                    length, (1 << count) - 1, int(pos == 0), int(pos + count == length)), (
+                    "ILLEGAL_APPLICATION_SHAPE", node, stream, pos, drive[:7])
+                if last:
+                    self.application_progress.pop((node, stream), None)
+                    self.application_complete[node, stream] = self.cycle
+                else:
+                    self.application_progress[node, stream] = pos + count, length
+                self.comparisons["application_input_contract"] += 1
             for channel, valid, ready, names in (
                 ("link", o["tv"], drive[9], ("td", "tk", "tf", "tl")),
                 ("message", o["mv"], drive[7], ("md", "mk", "mf", "ml", "ms", "mn")),
@@ -111,6 +141,11 @@ class Sim:
             if o["tv"] and drive[9]:
                 beat = tuple(o[k] for k in ("td", "tk", "tf", "tl"))
                 assert bool(beat[2]) == (not self.frames[node]), ("frame first", self.cycle, beat)
+                if beat[2] and ((beat[0] >> 24) & 255) == 0:
+                    stream = (beat[0] >> 32) & 3
+                    assert (node, stream) in self.application_complete
+                    assert self.cycle >= self.application_complete[node, stream] + 2, (
+                        "REGISTERED_TX_LATENCY", self.cycle, self.application_complete[node, stream])
                 self.frames[node].append(beat)
                 if beat[-1]:
                     words = self.frames[node]
