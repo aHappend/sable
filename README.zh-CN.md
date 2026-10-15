@@ -31,7 +31,7 @@
 | **架构与协议文档（`design/*.md`）** | **2 份文档**（[`design/ARCHITECTURE.md`](design/ARCHITECTURE.md), [`design/SPEC.md`](design/SPEC.md)） |
 | **验证与参考模型套件（`tests/*`）** | **10 个文件** |
 | **产品技术白皮书（`REPORT.pdf`）** | [**已发布 (`REPORT.pdf`)**](REPORT.pdf) |
-| **最近同步时间** | `2026-10-15 21:24:16 UTC+8` |
+| **最近同步时间** | `2026-10-15 21:25:19 UTC+8` |
 
 ## 系统架构与六大核心规格映射
 
