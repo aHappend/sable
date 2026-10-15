@@ -157,10 +157,13 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
     incoming_frames = [[], []]
     tx_seen = [collections.defaultdict(set), collections.defaultdict(set)]
     highest_occupancy = [collections.Counter(), collections.Counter()]
+    rx_expected = set()
+    rx_acknowledged = set()
 
     def rx_enqueue(words, identity, due=0):
         from model import decode
         d = decode(words)
+        rx_expected.add((d["stream"], identity))
         if not smoke and identity < 16:
             action = identity % 5
             if action == 0:
@@ -343,6 +346,10 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
                         fault_packet(wires[1 - node], words, d, cycle, attempts[node], counts, rng, decisions, not smoke)
                 else:
                     counts["ack_compares"] += 1
+                    if mode == 1:
+                        key = d["stream"], d["identity"]
+                        assert key in rx_expected, ("ACK_FOR_UNSENT_MODEL_DATA", key)
+                        rx_acknowledged.add(key)
                     if mode == 2:
                         fault_packet(wires[1 - node], words, d, cycle, attempts[node], counts, rng, decisions, not smoke)
             settled = all(statuses[n][s] == len(messages[s]) for n in range(nodes) for s in range(4)) if mode != 1 else oracles[0].done()
@@ -363,6 +370,8 @@ def run_transport(out, seed, mode, max_cycles=200000, smoke=False, mutant=None):
             assert counts["fragment_compares"] and counts["status_compares"]
         if mode != 0:
             assert all(oracles[n].compared for n in range(nodes))
+        if mode == 1:
+            assert rx_expected <= rx_acknowledged, ("MISSING_RX_ACKS", rx_expected - rx_acknowledged)
         if not smoke:
             required = (["DATA_drop", "DATA_duplicate", "DATA_delay", "DATA_corrupt_header",
                          "DATA_corrupt_payload", "DATA_corrupt_crc"] if mode != 0 else [])

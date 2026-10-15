@@ -49,7 +49,8 @@ def main():
                          "ambiguity": directed.ambiguity, "resets": directed.resets,
                          "rx-wrap": directed.rx_wrap, "parameters": directed.parameters,
                          "wrap": lambda p: directed.wrap(p, 24, 260),
-                         "exhaust": lambda p: directed.wrap(p, 1, 512)}
+                         "exhaust": lambda p: directed.wrap(p, 1, 512),
+                         "fairness": directed.receive_fairness}
                 results.append(cases[args.case](out / "run"))
             else:
                 results.append(run_transport(out / "run", args.seeds[0], args.mode,

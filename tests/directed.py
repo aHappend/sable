@@ -273,8 +273,14 @@ def timers(out):
     try:
         b.application(bytes(range(256)))
         b.until(lambda: len([x for x in b.output_beats if x[3]]) == 2)
+        b.lr = 0
+        b.idle(40)
+        assert not b.status
         b.wire(frame(1, 0, b.sim.session, 0))
         ack_cycle = b.input_beats[-1][0]
+        b.until(lambda: len(b.status) == 1)
+        assert b.status[0][2] == 0 and b.tick()["ir"] == 0
+        b.lr = 1
         b.until(lambda: len(b.frames) == 2 and len(b.status) == 1)
         assert b.frames[0][0] < ack_cycle < b.frames[1][0]
         assert b.status[0][2] == 0
@@ -282,6 +288,23 @@ def timers(out):
         assert len(b.frames) == 2 and len(b.status) == 1
         results.append(b.result("ACK_during_retransmission", ack_cycle=ack_cycle,
                                 retransmit_crc_cycle=b.frames[1][0], unique_status=True))
+    finally:
+        b.sim.close()
+    b = Bench(out / "public_crc_stall", mode=2, timeout=8, retries=0)
+    try:
+        b.application(b"x")
+        b.until(lambda: len(b.output_beats) == 4)
+        b.lr = 0
+        b.idle(40)
+        assert not b.status and b.last["fail"] == 0
+        assert b.last["tv"] and b.last["tl"] and b.last["tk"] == 15
+        b.lr = 1
+        b.until(lambda: len(b.frames) == 1)
+        tail = b.frames[0][0]
+        b.until(lambda: len(b.status) == 1)
+        assert b.status[0][2] == 1 and b.status[0][0] >= tail + 8
+        results.append(b.result("timer_starts_public_CRC", stalled_crc_cycles=40,
+                                timeout_cycles=8, crc_handshake_cycle=tail))
     finally:
         b.sim.close()
     b = Bench(out / "exhaust", mode=0, timeout=8, retries=4)
@@ -319,6 +342,44 @@ def mailbox(out):
         b.until(lambda: len(b.status) == 4)
         assert {s for _, s, c in b.status if c == 0} == set(range(4))
         return b.result("completion_mailboxes_full", retained_statuses=4, overwrite_prevented=True)
+    finally:
+        b.sim.close()
+
+
+def receive_fairness(out):
+    b = Bench(out, mode=1)
+    try:
+        b.mr = 0
+        data = bytes(i % 251 for i in range(4096))
+        for identity in range(16):
+            b.wire(frame(0, 0, b.sim.session, identity, data, identity * 256))
+        b.idle(80)
+        assert b.last["mv"] and b.last["ms"] == 0 and not b.app
+        # A blocked complete stream must not prevent another stream's acceptance/ACK.
+        b.wire(frame(0, 1, b.sim.session, 0, b"z"))
+        b.until(lambda: any(d["stream"] == 1 for _, _, d in b.frames))
+        assert not b.app
+        # New message for the still-owned stream is drained, not positively ACKed.
+        old_count = len(b.frames)
+        b.wire(frame(0, 0, b.sim.session, 16, b"next"))
+        b.idle(30)
+        assert len(b.frames) == old_count
+        b.mr = 1
+        b.until(lambda: len(b.app) >= 5)
+        first = b.app[:5]
+        assert any(o["ms"] == 1 for _, o in first), ("RX_APP_STARVATION", first)
+        b.until(lambda: len(b.app) == 513)
+        oracle = MessageOracle({0: [data], 1: [b"z"], 2: [], 3: []})
+        for _, o in b.app:
+            oracle.observe(o, 1)
+        assert oracle.done()
+        # Once the previous tail retires, the exact same next-message DATA is legal.
+        b.wire(frame(0, 0, b.sim.session, 16, b"next"))
+        b.until(lambda: len(b.app) == 514)
+        assert b.app[-1][1]["md"] == int.from_bytes(b"next", "little")
+        return b.result("receive_fairness_and_ownership", blocked_stream_bytes=4096,
+                        other_stream_ACK_while_blocked=True, other_stream_within_beats=5,
+                        next_message_rejected_until_tail=True, compared_bytes=oracle.compared + 4)
     finally:
         b.sim.close()
 
@@ -507,7 +568,8 @@ def parameters(out):
 
 def directed(out, max_cycles):
     results = [window(out / "window"), ack_integrity(out / "ack-integrity"),
-               rx_integrity(out / "rx-integrity"), mailbox(out / "mailbox")]
+               rx_integrity(out / "rx-integrity"), mailbox(out / "mailbox"),
+               receive_fairness(out / "receive-fairness")]
     results.extend(reverse_and_fifo(out / "rx-resources"))
     results.extend(timers(out / "timers"))
     results.append(ambiguity(out / "ambiguity"))
